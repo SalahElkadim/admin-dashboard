@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schema.railway.app/railway.json",
+  "build": {
+    "buildCommand": "npm install && npm run build"
+  },
+  "deploy": {
+    "startCommand": "npx serve -s build"
+  }
+}
