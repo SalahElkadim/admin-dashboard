@@ -13,3 +13,4 @@ export const updateCategory = (id, data) =>
 
 export const deleteCategory = (id) =>
   axiosInstance.delete(`/categories/${id}/`);
+//ddd
