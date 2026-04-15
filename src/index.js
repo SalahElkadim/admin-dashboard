@@ -1,17 +1,36 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';
-import App from './App';
-import reportWebVitals from './reportWebVitals';
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { ConfigProvider } from "antd";
+import arEG from "antd/locale/ar_EG";
+import "./index.css";
+import App from "./App";
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
+const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
   <React.StrictMode>
-    <App />
+    <ConfigProvider
+      locale={arEG}
+      direction="rtl"
+      theme={{
+        token: {
+          colorPrimary: "#6366F1",
+          borderRadius: 8,
+          fontFamily: "'Cairo', sans-serif",
+        },
+        components: {
+          Menu: {
+            darkItemBg: "transparent",
+            darkItemSelectedBg: "rgba(99,102,241,0.15)",
+            darkItemSelectedColor: "#818CF8",
+            darkItemColor: "#94A3B8",
+            darkItemHoverColor: "#fff",
+            itemMarginInline: 6,
+            itemBorderRadius: 10,
+          },
+        },
+      }}
+    >
+      <App />
+    </ConfigProvider>
   </React.StrictMode>
 );
-
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
-reportWebVitals();
