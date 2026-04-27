@@ -618,6 +618,8 @@ function ProductModal({
         uploaded_videos: videoUrls,
       };
       console.log("payload", payload);
+      console.log("uploaded_images", JSON.stringify(payload.uploaded_images));
+
       // ── 4. حفظ المنتج ──
       let productId;
       if (isEdit) {
