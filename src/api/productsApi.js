@@ -9,12 +9,12 @@ export const getProduct = (id) => axiosInstance.get(`/products/${id}/`);
 
 export const createProduct = (data) =>
   axiosInstance.post("/products/", data, {
-    headers: { "Content-Type": "multipart/form-data" },
+    headers: { "Content-Type": "application/json" },
   });
 
 export const updateProduct = (id, data) =>
   axiosInstance.patch(`/products/${id}/`, data, {
-    headers: { "Content-Type": "multipart/form-data" },
+    headers: { "Content-Type": "application/json" },
   });
 
 export const deleteProduct = (id) => axiosInstance.delete(`/products/${id}/`);
