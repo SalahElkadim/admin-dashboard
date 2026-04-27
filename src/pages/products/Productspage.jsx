@@ -22,7 +22,6 @@ import {
   message,
   Avatar,
   Divider,
-  Empty,
   Progress,
 } from "antd";
 import {
@@ -39,6 +38,7 @@ import {
   CheckCircleOutlined,
   TagsOutlined,
   VideoCameraOutlined,
+  LinkOutlined,
 } from "@ant-design/icons";
 import {
   getProducts,
@@ -58,7 +58,7 @@ const { Dragger } = Upload;
 // CLOUDINARY CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
 const CLOUDINARY_CLOUD_NAME = "deahgslyw";
-const CLOUDINARY_UPLOAD_PRESET = "store_uploads"; // ← غير ده للـ preset بتاعك
+const CLOUDINARY_UPLOAD_PRESET = "store_uploads";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -78,7 +78,7 @@ const fmtMoney = (v) =>
   });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// UPLOAD TO CLOUDINARY – مع progress
+// UPLOAD TO CLOUDINARY
 // ─────────────────────────────────────────────────────────────────────────────
 const uploadToCloudinary = (file, type = "image", onProgress) => {
   return new Promise((resolve, reject) => {
@@ -87,14 +87,11 @@ const uploadToCloudinary = (file, type = "image", onProgress) => {
     formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
 
     const xhr = new XMLHttpRequest();
-
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {
-        const percent = Math.round((e.loaded / e.total) * 100);
-        onProgress(percent);
+        onProgress(Math.round((e.loaded / e.total) * 100));
       }
     };
-
     xhr.onload = () => {
       try {
         const data = JSON.parse(xhr.responseText);
@@ -105,9 +102,7 @@ const uploadToCloudinary = (file, type = "image", onProgress) => {
         reject(new Error("خطأ في قراءة الاستجابة"));
       }
     };
-
     xhr.onerror = () => reject(new Error("خطأ في الاتصال بـ Cloudinary"));
-
     xhr.open(
       "POST",
       `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${type}/upload`
@@ -175,9 +170,131 @@ function UploadProgressItem({ name, percent, type }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// IMAGE + ATTRIBUTE LINKER
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * بعد رفع الصور، بيظهر لكل صورة Dropdown يختار منه المستخدم
+ * أي قيمة خاصية (AttributeValue) مرتبطة بيها — مثلاً اللون الأحمر.
+ *
+ * القيم المتاحة بتيجي من نفس الـ attributes اللي المنتج بيعمل variants منها.
+ */
+function ImageAttributeLinker({ uploadedImages, attributes, onChange }) {
+  // uploadedImages: [{uid, name, url}]
+  // linked: { uid -> attributeValueId | null }
+  const [linked, setLinked] = useState({});
+
+  // كل ما اتغيرت الصور نصفّر الـ mapping للصور الجديدة بس
+  useEffect(() => {
+    setLinked((prev) => {
+      const next = {};
+      uploadedImages.forEach((img) => {
+        next[img.uid] = prev[img.uid] ?? null;
+      });
+      return next;
+    });
+  }, [uploadedImages]);
+
+  const handleLink = (uid, avId) => {
+    const next = { ...linked, [uid]: avId ?? null };
+    setLinked(next);
+    onChange(
+      uploadedImages.map((img) => ({
+        url: img.url,
+        attribute_value: next[img.uid] ?? null,
+      }))
+    );
+  };
+
+  // flatten كل الـ values من كل الـ attributes
+  const allValues = attributes.flatMap((attr) =>
+    (attr.values ?? []).map((v) => ({ ...v, attrName: attr.name }))
+  );
+
+  if (uploadedImages.length === 0 || allValues.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        marginTop: 16,
+        background: "#FAFAFA",
+        border: "1px dashed #C7D2FE",
+        borderRadius: 12,
+        padding: "14px 16px",
+      }}
+    >
+      <Space style={{ marginBottom: 10 }}>
+        <LinkOutlined style={{ color: "#6366F1" }} />
+        <Text style={{ fontWeight: 600, color: "#374151", fontSize: 13 }}>
+          ربط كل صورة بلون / خاصية (اختياري)
+        </Text>
+      </Space>
+      <Text
+        style={{
+          fontSize: 12,
+          color: "#94A3B8",
+          display: "block",
+          marginBottom: 12,
+        }}
+      >
+        عشان لما المستخدم يختار لون تظهرله صورته الصح تلقائياً
+      </Text>
+
+      {uploadedImages.map((img) => (
+        <div
+          key={img.uid}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "8px 0",
+            borderBottom: "1px solid #F1F5F9",
+          }}
+        >
+          {/* thumbnail */}
+          <Avatar
+            shape="square"
+            size={40}
+            src={img.url}
+            style={{
+              borderRadius: 8,
+              flexShrink: 0,
+              border: "1px solid #E2E8F0",
+            }}
+            icon={<PictureOutlined />}
+          />
+          <Text ellipsis style={{ flex: 1, fontSize: 12, color: "#64748B" }}>
+            {img.name}
+          </Text>
+          <Select
+            placeholder="اختر خاصية..."
+            allowClear
+            size="small"
+            style={{ width: 180 }}
+            value={linked[img.uid] ?? undefined}
+            onChange={(val) => handleLink(img.uid, val)}
+          >
+            {allValues.map((v) => (
+              <Option key={v.id} value={v.id}>
+                <Space size={4}>
+                  <Text style={{ fontSize: 11, color: "#94A3B8" }}>
+                    {v.attrName}:
+                  </Text>
+                  <Text style={{ fontSize: 12, fontWeight: 500 }}>
+                    {v.value}
+                  </Text>
+                </Space>
+              </Option>
+            ))}
+          </Select>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ATTRIBUTE SELECTOR + COMBINATIONS TABLE
 // ─────────────────────────────────────────────────────────────────────────────
-
 function AttributeSelector({ attributes, onChange }) {
   const [selectedValues, setSelectedValues] = useState({});
   const [combinations, setCombinations] = useState([]);
@@ -207,7 +324,6 @@ function AttributeSelector({ attributes, onChange }) {
       return;
     }
 
-    // Cartesian product
     const cartesian = (...arrays) =>
       arrays.reduce(
         (acc, arr) => acc.flatMap((combo) => arr.map((val) => [...combo, val])),
@@ -233,7 +349,6 @@ function AttributeSelector({ attributes, onChange }) {
   const handleStockChange = (index, val) => {
     const next = { ...stockValues, [index]: val };
     setStockValues(next);
-
     onChange(
       combinations.map((combo, i) => ({
         attribute_value_ids: combo.map((c) => c.id),
@@ -249,7 +364,6 @@ function AttributeSelector({ attributes, onChange }) {
 
   return (
     <div>
-      {/* Step hint */}
       <div
         style={{
           background: "#EFF6FF",
@@ -265,7 +379,6 @@ function AttributeSelector({ attributes, onChange }) {
         3: حدد المخزون لكل توليفة
       </div>
 
-      {/* Step 1: Select values per attribute */}
       {attributes.map((attr) => (
         <div key={attr.id} style={{ marginBottom: 16 }}>
           <Text strong style={{ display: "block", marginBottom: 6 }}>
@@ -287,7 +400,6 @@ function AttributeSelector({ attributes, onChange }) {
         </div>
       ))}
 
-      {/* Step 2: Generate button */}
       <Button
         type="dashed"
         block
@@ -304,11 +416,10 @@ function AttributeSelector({ attributes, onChange }) {
         }}
       >
         {totalSelected > 0
-          ? `توليد الـ Variants تلقائياً`
+          ? "توليد الـ Variants تلقائياً"
           : "اختر قيم الـ Attributes أولاً"}
       </Button>
 
-      {/* Step 3: Combinations table */}
       {generated && combinations.length > 0 && (
         <div>
           <div
@@ -355,7 +466,6 @@ function AttributeSelector({ attributes, onChange }) {
                   </Tag>
                 ))}
               </Space>
-
               <Space>
                 <Text style={{ fontSize: 12, color: "#64748B" }}>المخزون:</Text>
                 <InputNumber
@@ -377,7 +487,6 @@ function AttributeSelector({ attributes, onChange }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // PRODUCT MODAL
 // ─────────────────────────────────────────────────────────────────────────────
-
 function ProductModal({
   open,
   onClose,
@@ -394,9 +503,12 @@ function ProductModal({
   const [uploadProgress, setUploadProgress] = useState({});
   const [variantsData, setVariantsData] = useState([]);
 
+  // ── بعد رفع الصور نحتاج نخزن url لكل ملف + الـ attribute_value المختار ──
+  // uploadedImagesWithAttrs: [{uid, name, url, attribute_value}]
+  const [uploadedImagesWithAttrs, setUploadedImagesWithAttrs] = useState([]);
+
   const isEdit = !!editRecord;
 
-  // ─── seed form on open ───────────────────────────────────────────────────
   useEffect(() => {
     if (open) {
       if (isEdit) {
@@ -420,10 +532,13 @@ function ProductModal({
       setUploadProgress({});
       setActiveTab("info");
       setVariantsData([]);
+      setUploadedImagesWithAttrs([]);
     }
   }, [open, editRecord, isEdit, form]);
 
-  // ─── submit ──────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // SUBMIT
+  // ─────────────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
@@ -431,7 +546,7 @@ function ProductModal({
       setUploadProgress({});
 
       // ── 1. رفع الصور على Cloudinary ──
-      const imageUrls = [];
+      const uploadedImages = []; // [{uid, name, url}]
       for (const f of fileList) {
         if (!f.originFileObj) continue;
         const fileName = f.name;
@@ -449,10 +564,15 @@ function ProductModal({
             }));
           }
         );
-        imageUrls.push(url);
+        uploadedImages.push({ uid: f.uid, name: f.name, url });
       }
 
-      // ── 2. رفع الفيديوهات على Cloudinary ──
+      // حدّث الـ state عشان ImageAttributeLinker يشتغل
+      setUploadedImagesWithAttrs(
+        uploadedImages.map((img) => ({ ...img, attribute_value: null }))
+      );
+
+      // ── 2. رفع الفيديوهات ──
       const videoUrls = [];
       for (const f of videoList) {
         if (!f.originFileObj) continue;
@@ -474,68 +594,56 @@ function ProductModal({
         videoUrls.push(url);
       }
 
-      // ── 3. بناء FormData وإرساله للـ Backend ──
-      const fd = new FormData();
-      const productFields = [
-        "name",
-        "description",
-        "price",
-        "discount_price",
-        "sku",
-        "category",
-        "status",
-      ];
-      productFields.forEach((k) => {
-        const val = values[k];
-        if (val !== undefined && val !== null && val !== "") {
-          fd.append(k, val);
-        } else if (k === "discount_price") {
-          fd.append(k, "");
-        }
-      });
+      // ── 3. بناء الـ payload للباك اند ──
+      // uploaded_images بقت array من objects { url, attribute_value }
+      // الباك اند ProductWriteSerializer جاهز يستقبلها بعد التعديل
+      const imagesPayload =
+        uploadedImagesWithAttrs.length > 0
+          ? uploadedImagesWithAttrs
+          : uploadedImages.map((img) => ({
+              url: img.url,
+              attribute_value: null,
+            }));
 
-      imageUrls.forEach((url) => fd.append("uploaded_images", url));
-      videoUrls.forEach((url) => fd.append("uploaded_videos", url));
+      // بنبعت JSON مش FormData عشان نقدر نبعت array of objects صح
+      const payload = {
+        name: values.name,
+        description: values.description ?? "",
+        price: values.price,
+        discount_price: values.discount_price ?? null,
+        sku: values.sku ?? "",
+        category: values.category,
+        status: values.status,
+        uploaded_images: imagesPayload,
+        uploaded_videos: videoUrls,
+      };
 
       // ── 4. حفظ المنتج ──
       let productId;
       if (isEdit) {
-        try {
-          const res = await updateProduct(editRecord.id, fd);
-          console.log("update response:", res.data);
-          productId = editRecord.id;
-          message.success("تم تحديث المنتج ✅");
-        } catch (err) {
-          console.error("update error:", err.response?.data);
-          throw err;
-        }
+        await updateProduct(editRecord.id, payload);
+        productId = editRecord.id;
+        message.success("تم تحديث المنتج ✅");
       } else {
-        const { data } = await createProduct(fd);
+        const { data } = await createProduct(payload);
         productId = data?.data?.id ?? data?.id;
         message.success("تم إنشاء المنتج ✅");
       }
 
       // ── 5. حفظ الـ Variants ──
       if (!isEdit && variantsData.length > 0) {
-        try {
-          const results = await Promise.allSettled(
-            variantsData.map((v) =>
-              createProductVariant(productId, {
-                attribute_value_ids: v.attribute_value_ids,
-                initial_stock: v.stock ?? 0,
-              })
-            )
-          );
-
-          const failed = results.filter((r) => r.status === "rejected").length;
-          if (failed > 0) {
-            message.warning(`${failed} توليفات لم تُحفظ`);
-          } else {
-            message.success(`تم إنشاء ${variantsData.length} variant بنجاح ✅`);
-          }
-        } catch (err) {
-          message.error("فشل في إنشاء الـ Variants");
-        }
+        const results = await Promise.allSettled(
+          variantsData.map((v) =>
+            createProductVariant(productId, {
+              attribute_value_ids: v.attribute_value_ids,
+              initial_stock: v.stock ?? 0,
+            })
+          )
+        );
+        const failed = results.filter((r) => r.status === "rejected").length;
+        if (failed > 0) message.warning(`${failed} توليفات لم تُحفظ`);
+        else
+          message.success(`تم إنشاء ${variantsData.length} variant بنجاح ✅`);
       }
 
       onSaved();
@@ -548,7 +656,7 @@ function ProductModal({
     }
   };
 
-  // ─── Tab Header ──────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   const TabBtn = ({ id, icon, label }) => (
     <button
       type="button"
@@ -578,6 +686,7 @@ function ProductModal({
   const progressEntries = Object.entries(uploadProgress);
   const isUploading = progressEntries.some(([, v]) => v.percent < 100);
 
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <Modal
       open={open}
@@ -723,7 +832,13 @@ function ProductModal({
                 listType="picture-card"
                 fileList={fileList}
                 beforeUpload={() => false}
-                onChange={({ fileList: fl }) => setFileList(fl)}
+                onChange={({ fileList: fl }) => {
+                  setFileList(fl);
+                  // لو حُذفت صورة نزيلها من الـ mapping
+                  setUploadedImagesWithAttrs((prev) =>
+                    prev.filter((img) => fl.find((f) => f.uid === img.uid))
+                  );
+                }}
                 multiple
                 accept="image/*"
                 style={{ borderRadius: 10 }}
@@ -740,7 +855,54 @@ function ProductModal({
               </Dragger>
             </Form.Item>
 
-            <Divider style={{ margin: "12px 0" }}>فيديوهات المنتج</Divider>
+            {/*
+              ✦ جديد: ربط كل صورة بخاصية
+              بيظهر لو:
+                1. في صور مختارة
+                2. في attributes موجودة (عشان نعرف نقدم إيه في الـ dropdown)
+              لو الـ uploadedImagesWithAttrs فاضلة (قبل الرفع الفعلي)،
+              بنعمل fallback من fileList عشان نعرض الـ linker بـ preview بس
+            */}
+            {fileList.length > 0 && attributes.length > 0 && (
+              <ImageAttributeLinker
+                uploadedImages={
+                  uploadedImagesWithAttrs.length > 0
+                    ? uploadedImagesWithAttrs
+                    : fileList
+                        .filter((f) => f.thumbUrl || f.url)
+                        .map((f) => ({
+                          uid: f.uid,
+                          name: f.name,
+                          url: f.thumbUrl || f.url || "",
+                        }))
+                }
+                attributes={attributes}
+                onChange={(mapped) => {
+                  // mapped: [{url, attribute_value}]
+                  // نحتاج نحافظ على uid عشان نعمل sync
+                  setUploadedImagesWithAttrs((prev) => {
+                    // لو الصور اترفعت فعلاً ← update الـ attribute_value بس
+                    if (prev.length > 0) {
+                      return prev.map((img, i) => ({
+                        ...img,
+                        attribute_value: mapped[i]?.attribute_value ?? null,
+                      }));
+                    }
+                    // قبل الرفع ← خزن الـ mapping مؤقتاً
+                    return fileList
+                      .filter((f) => f.thumbUrl || f.url)
+                      .map((f, i) => ({
+                        uid: f.uid,
+                        name: f.name,
+                        url: f.thumbUrl || f.url || "",
+                        attribute_value: mapped[i]?.attribute_value ?? null,
+                      }));
+                  });
+                }}
+              />
+            )}
+
+            <Divider style={{ margin: "16px 0" }}>فيديوهات المنتج</Divider>
 
             {/* ── الفيديو ── */}
             <Form.Item>
@@ -842,7 +1004,7 @@ function ProductModal({
                     كيف تعمل الخصائص
                   </Text>
                   <Text style={{ fontSize: 12, color: "#3B82F6" }}>
-                    الخصائص تحتوي على المميزات مثل الالوان والحجم والمخزون
+                    الخصائص تحتوي على المميزات مثل الألوان والحجم والمخزون
                   </Text>
                 </div>
               </div>
@@ -901,7 +1063,6 @@ function ProductModal({
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN PAGE
 // ─────────────────────────────────────────────────────────────────────────────
-
 export default function ProductsPage() {
   const navigate = useNavigate();
 
@@ -924,7 +1085,6 @@ export default function ProductsPage() {
     page_size: 10,
   });
 
-  // ── Fetch Products ────────────────────────────────────────────────────────
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
@@ -951,7 +1111,6 @@ export default function ProductsPage() {
     fetchProducts();
   }, [fetchProducts]);
 
-  // ── Fetch Categories & Attributes ─────────────────────────────────────────
   useEffect(() => {
     getCategories()
       .then(({ data }) => setCategories(data.results ?? data))
@@ -961,7 +1120,6 @@ export default function ProductsPage() {
       .catch(() => {});
   }, []);
 
-  // ── Actions ───────────────────────────────────────────────────────────────
   const handleDelete = async (id) => {
     try {
       await deleteProduct(id);
@@ -976,8 +1134,8 @@ export default function ProductsPage() {
     setEditRecord(null);
     setModalOpen(true);
   };
-  const openEdit = (record) => {
-    setEditRecord(record);
+  const openEdit = (r) => {
+    setEditRecord(r);
     setModalOpen(true);
   };
 
@@ -995,7 +1153,7 @@ export default function ProductsPage() {
       page_size: 10,
     });
 
-  const handleTableChange = (pagination, _, sorter) => {
+  const handleTableChange = (pagination, _, sorter) =>
     setFilters((prev) => ({
       ...prev,
       page: pagination.current,
@@ -1004,9 +1162,7 @@ export default function ProductsPage() {
         ? (sorter.order === "ascend" ? "" : "-") + sorter.field
         : "-created_at",
     }));
-  };
 
-  // ── Columns ───────────────────────────────────────────────────────────────
   const columns = [
     {
       title: "المنتج",
@@ -1188,7 +1344,6 @@ export default function ProductsPage() {
 
   return (
     <div style={{ direction: "rtl" }}>
-      {/* ── Page Header ── */}
       <div
         style={{
           marginBottom: 24,
@@ -1224,7 +1379,6 @@ export default function ProductsPage() {
         </Button>
       </div>
 
-      {/* ── Filters Card ── */}
       <Card
         style={{
           borderRadius: 16,
@@ -1309,7 +1463,6 @@ export default function ProductsPage() {
         </Row>
       </Card>
 
-      {/* ── Table Card ── */}
       <Card
         style={{ borderRadius: 16, border: "1px solid #E2E8F0" }}
         bodyStyle={{ padding: 0 }}
@@ -1364,7 +1517,6 @@ export default function ProductsPage() {
         />
       </Card>
 
-      {/* ── Modal ── */}
       <ProductModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -1374,7 +1526,6 @@ export default function ProductsPage() {
         attributes={attributes}
       />
 
-      {/* ── Image Preview ── */}
       <Image
         src={previewImg}
         style={{ display: "none" }}

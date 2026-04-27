@@ -12,19 +12,20 @@ import {
   Row,
   Col,
   Tooltip,
-  Popconfirm,
   message,
   Divider,
   Badge,
+  Select,
+  Avatar,
 } from "antd";
 import {
   PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
   SearchOutlined,
   TagsOutlined,
   ReloadOutlined,
   AppstoreOutlined,
+  PictureOutlined,
+  LinkOutlined,
 } from "@ant-design/icons";
 import {
   getAttributes,
@@ -34,8 +35,8 @@ import {
 } from "../../api/productsApi";
 
 const { Text, Title } = Typography;
+const { Option } = Select;
 
-// ── الألوان التلقائية للـ Tags ────────────────────────────────────────────────
 const TAG_COLORS = [
   "blue",
   "purple",
@@ -53,7 +54,6 @@ const getColor = (index) => TAG_COLORS[index % TAG_COLORS.length];
 // ─────────────────────────────────────────────────────────────────────────────
 // MODAL: إضافة Attribute جديد
 // ─────────────────────────────────────────────────────────────────────────────
-
 function AddAttributeModal({ open, onClose, onSaved }) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -131,16 +131,14 @@ function AddAttributeModal({ open, onClose, onSaved }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MODAL: إدارة Values الخاصة بـ Attribute معين
+// MODAL: إدارة Values الخاصة بـ Attribute
 // ─────────────────────────────────────────────────────────────────────────────
-
 function ManageValuesModal({ open, onClose, attribute, onSaved }) {
   const [newValue, setNewValue] = useState("");
   const [adding, setAdding] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [values, setValues] = useState([]);
 
-  // ابدأ بالقيم الحالية
   useEffect(() => {
     if (open && attribute) {
       setValues(attribute.values ?? []);
@@ -207,10 +205,10 @@ function ManageValuesModal({ open, onClose, attribute, onSaved }) {
           <Text style={{ fontWeight: 700 }}>قيم خاصية: {attribute?.name}</Text>
         </Space>
       }
-      width={500}
+      width={520}
       style={{ direction: "rtl" }}
     >
-      {/* ── Input إضافة قيمة جديدة ── */}
+      {/* ── إضافة قيمة جديدة ── */}
       <div style={{ marginBottom: 20, marginTop: 16 }}>
         <Text
           style={{
@@ -260,20 +258,31 @@ function ManageValuesModal({ open, onClose, attribute, onSaved }) {
 
       {/* ── القيم الحالية ── */}
       <div>
-        <Text
+        <div
           style={{
-            fontWeight: 600,
-            display: "block",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
             marginBottom: 12,
-            color: "#374151",
           }}
         >
-          القيم الحالية
-          <Badge
-            count={values.length}
-            style={{ background: "#6366F1", marginRight: 8 }}
-          />
-        </Text>
+          <Text style={{ fontWeight: 600, color: "#374151" }}>
+            القيم الحالية
+            <Badge
+              count={values.length}
+              style={{ background: "#6366F1", marginRight: 8 }}
+            />
+          </Text>
+          {/* ✦ إشعار: بعض القيم مرتبطة بصور */}
+          {values.some((v) => v.images_count > 0) && (
+            <Space size={4}>
+              <LinkOutlined style={{ color: "#10B981", fontSize: 12 }} />
+              <Text style={{ fontSize: 11, color: "#10B981" }}>
+                بعض القيم مرتبطة بصور منتجات
+              </Text>
+            </Space>
+          )}
+        </div>
 
         {values.length === 0 ? (
           <div
@@ -292,31 +301,57 @@ function ManageValuesModal({ open, onClose, attribute, onSaved }) {
         ) : (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {values.map((v, i) => (
-              <Tag
+              <Tooltip
                 key={v.id}
-                color={getColor(i)}
-                style={{
-                  borderRadius: 20,
-                  padding: "4px 12px",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                }}
-                closable
-                closeIcon={
-                  deletingId === v.id ? (
-                    <span style={{ fontSize: 10 }}>...</span>
-                  ) : undefined
+                title={
+                  v.images_count > 0
+                    ? `مرتبط بـ ${v.images_count} صورة منتج`
+                    : "لا توجد صور مرتبطة بهذه القيمة"
                 }
-                onClose={(e) => {
-                  e.preventDefault();
-                  handleDelete(v.id);
-                }}
               >
-                {v.value}
-              </Tag>
+                <Tag
+                  color={getColor(i)}
+                  style={{
+                    borderRadius: 20,
+                    padding: "4px 12px",
+                    fontSize: 13,
+                    fontWeight: 500,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    cursor: "default",
+                  }}
+                  closable
+                  closeIcon={
+                    deletingId === v.id ? (
+                      <span style={{ fontSize: 10 }}>...</span>
+                    ) : undefined
+                  }
+                  onClose={(e) => {
+                    e.preventDefault();
+                    handleDelete(v.id);
+                  }}
+                >
+                  {/* ✦ أيقونة صورة لو في صور مرتبطة */}
+                  {v.images_count > 0 && (
+                    <PictureOutlined style={{ fontSize: 11 }} />
+                  )}
+                  {v.value}
+                  {v.images_count > 0 && (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        background: "rgba(255,255,255,0.4)",
+                        borderRadius: 10,
+                        padding: "0 5px",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {v.images_count}
+                    </span>
+                  )}
+                </Tag>
+              </Tooltip>
             ))}
           </div>
         )}
@@ -328,7 +363,6 @@ function ManageValuesModal({ open, onClose, attribute, onSaved }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN PAGE
 // ─────────────────────────────────────────────────────────────────────────────
-
 export default function AttributesPage() {
   const [attributes, setAttributes] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -339,7 +373,6 @@ export default function AttributesPage() {
     attribute: null,
   });
 
-  // ── Fetch ────────────────────────────────────────────────────────────────
   const fetchAttributes = useCallback(async () => {
     setLoading(true);
     try {
@@ -356,12 +389,16 @@ export default function AttributesPage() {
     fetchAttributes();
   }, [fetchAttributes]);
 
-  // ── Filtered ──────────────────────────────────────────────────────────────
   const filtered = attributes.filter((a) =>
     a.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  // ── Columns ───────────────────────────────────────────────────────────────
+  // إجمالي القيم المرتبطة بصور عبر كل الخصائص
+  const totalLinkedValues = attributes.reduce(
+    (sum, a) => sum + (a.values ?? []).filter((v) => v.images_count > 0).length,
+    0
+  );
+
   const columns = [
     {
       title: "اسم الخاصية",
@@ -400,13 +437,42 @@ export default function AttributesPage() {
         return (
           <Space wrap size={4}>
             {shown.map((v, i) => (
-              <Tag
+              <Tooltip
                 key={v.id}
-                color={getColor(i)}
-                style={{ borderRadius: 20, padding: "2px 10px", fontSize: 12 }}
+                title={
+                  v.images_count > 0 ? `مرتبط بـ ${v.images_count} صورة` : null
+                }
               >
-                {v.value}
-              </Tag>
+                <Tag
+                  color={getColor(i)}
+                  style={{
+                    borderRadius: 20,
+                    padding: "2px 10px",
+                    fontSize: 12,
+                  }}
+                  icon={
+                    v.images_count > 0 ? (
+                      <PictureOutlined style={{ fontSize: 10 }} />
+                    ) : null
+                  }
+                >
+                  {v.value}
+                  {/* ✦ عداد الصور المرتبطة */}
+                  {v.images_count > 0 && (
+                    <span
+                      style={{
+                        marginRight: 4,
+                        fontSize: 10,
+                        background: "rgba(255,255,255,0.5)",
+                        borderRadius: 8,
+                        padding: "0 4px",
+                      }}
+                    >
+                      {v.images_count}
+                    </span>
+                  )}
+                </Tag>
+              </Tooltip>
             ))}
             {rest > 0 && (
               <Tag
@@ -433,6 +499,26 @@ export default function AttributesPage() {
           }}
         />
       ),
+    },
+    {
+      // ✦ عمود جديد: عدد القيم المرتبطة بصور في هذه الخاصية
+      title: "مرتبط بصور",
+      dataIndex: "values",
+      key: "linked",
+      width: 120,
+      render: (values) => {
+        const count = (values ?? []).filter((v) => v.images_count > 0).length;
+        return count > 0 ? (
+          <Space size={4}>
+            <PictureOutlined style={{ color: "#10B981", fontSize: 13 }} />
+            <Text style={{ color: "#10B981", fontWeight: 600, fontSize: 13 }}>
+              {count} قيم
+            </Text>
+          </Space>
+        ) : (
+          <Text style={{ color: "#CBD5E1", fontSize: 12 }}>—</Text>
+        );
+      },
     },
     {
       title: "",
@@ -536,6 +622,23 @@ export default function AttributesPage() {
             </Text>
           </Card>
         </Col>
+        {/* ✦ كارت جديد: القيم المرتبطة بصور */}
+        <Col xs={12} sm={6}>
+          <Card
+            style={{ borderRadius: 14, border: "1px solid #E2E8F0" }}
+            bodyStyle={{ padding: 16 }}
+          >
+            <Text style={{ color: "#64748B", fontSize: 12, display: "block" }}>
+              قيم مرتبطة بصور
+            </Text>
+            <Space align="baseline">
+              <Text style={{ fontSize: 28, fontWeight: 800, color: "#F59E0B" }}>
+                {totalLinkedValues}
+              </Text>
+              <PictureOutlined style={{ color: "#F59E0B" }} />
+            </Space>
+          </Card>
+        </Col>
       </Row>
 
       {/* ── Search + Table ── */}
@@ -543,7 +646,6 @@ export default function AttributesPage() {
         style={{ borderRadius: 16, border: "1px solid #E2E8F0" }}
         bodyStyle={{ padding: 0 }}
       >
-        {/* Search Bar */}
         <div
           style={{ padding: "14px 20px", borderBottom: "1px solid #F1F5F9" }}
         >
