@@ -568,9 +568,10 @@ function ProductModal({
       }
 
       // حدّث الـ state عشان ImageAttributeLinker يشتغل
-      setUploadedImagesWithAttrs(
-        uploadedImages.map((img) => ({ ...img, attribute_value: null }))
-      );
+      const linkedAttrs = {};
+      uploadedImagesWithAttrs.forEach((item) => {
+        linkedAttrs[item.uid] = item.attribute_value ?? null;
+      });
 
       // ── 2. رفع الفيديوهات ──
       const videoUrls = [];
@@ -597,13 +598,10 @@ function ProductModal({
       // ── 3. بناء الـ payload للباك اند ──
       // uploaded_images بقت array من objects { url, attribute_value }
       // الباك اند ProductWriteSerializer جاهز يستقبلها بعد التعديل
-      const imagesPayload =
-        uploadedImagesWithAttrs.length > 0
-          ? uploadedImagesWithAttrs
-          : uploadedImages.map((img) => ({
-              url: img.url,
-              attribute_value: null,
-            }));
+      const imagesPayload = uploadedImages.map((img) => ({
+        url: img.url,
+        attribute_value: linkedAttrs[img.uid] ?? null,
+      }));
 
       // بنبعت JSON مش FormData عشان نقدر نبعت array of objects صح
       const payload = {
