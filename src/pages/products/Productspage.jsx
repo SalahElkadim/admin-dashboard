@@ -602,7 +602,9 @@ function ProductModal({
         url: img.url,
         attribute_value: linkedAttrs[img.uid] ?? null,
       }));
-
+      const cleanImagesPayload = imagesPayload.filter(
+        (img) => img.url && img.url.startsWith("http")
+      );
       // بنبعت JSON مش FormData عشان نقدر نبعت array of objects صح
       const payload = {
         name: values.name,
@@ -612,10 +614,10 @@ function ProductModal({
         sku: values.sku ?? "",
         category: values.category,
         status: values.status,
-        uploaded_images: imagesPayload,
+        uploaded_images: cleanImagesPayload, // ← هنا
         uploaded_videos: videoUrls,
       };
-
+      console.log("payload", payload);
       // ── 4. حفظ المنتج ──
       let productId;
       if (isEdit) {
