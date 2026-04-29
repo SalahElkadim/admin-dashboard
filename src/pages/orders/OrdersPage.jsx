@@ -39,6 +39,7 @@ import {
   CloseCircleOutlined,
   RollbackOutlined,
   GiftOutlined,
+  DeleteOutlined,
 } from "@ant-design/icons";
 import {
   getOrders,
@@ -46,6 +47,7 @@ import {
   updateOrderStatus,
   getOrderStats,
   exportOrders,
+  deleteOrder,
 } from "../../api/ordersapi";
 
 const { Text, Title } = Typography;
@@ -770,7 +772,15 @@ export default function OrdersPage() {
       message.error("فشل التصدير");
     }
   };
-
+  const handleDeleteOrder = async (id) => {
+    try {
+      await deleteOrder(id);
+      message.success("تم حذف الطلب بنجاح");
+      fetchOrders();
+    } catch (err) {
+      message.error(err.response?.data?.message || "فشل حذف الطلب");
+    }
+  };
   const handleFilterChange = (key, val) =>
     setFilters((prev) => ({ ...prev, [key]: val, page: 1 }));
 
@@ -953,15 +963,34 @@ export default function OrdersPage() {
       fixed: "left",
       width: 60,
       render: (_, r) => (
-        <Tooltip title="عرض التفاصيل">
-          <Button
-            type="text"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => openDrawer(r.id)}
-            style={{ color: "#6366F1" }}
-          />
-        </Tooltip>
+        <Space>
+          <Tooltip title="عرض التفاصيل">
+            <Button
+              type="text"
+              size="small"
+              icon={<EyeOutlined />}
+              onClick={() => openDrawer(r.id)}
+              style={{ color: "#6366F1" }}
+            />
+          </Tooltip>
+          <Popconfirm
+            title="حذف الطلب"
+            description={`هل أنت متأكد من حذف الطلب #${r.order_number}؟`}
+            onConfirm={() => handleDeleteOrder(r.id)}
+            okText="حذف"
+            cancelText="إلغاء"
+            okButtonProps={{ danger: true }}
+          >
+            <Tooltip title="حذف الطلب">
+              <Button
+                type="text"
+                size="small"
+                icon={<DeleteOutlined />}
+                style={{ color: "#EF4444" }}
+              />
+            </Tooltip>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];

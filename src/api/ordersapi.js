@@ -15,3 +15,5 @@ export const exportOrders = (params = {}) =>
     params,
     responseType: "blob",
   });
+export const deleteOrder = (id) =>
+  axiosInstance.delete(`/orders/${id}/delete/`);

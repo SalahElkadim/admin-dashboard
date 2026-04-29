@@ -17,6 +17,7 @@ import {
   Badge,
   Select,
   Avatar,
+  Popconfirm,
 } from "antd";
 import {
   PlusOutlined,
@@ -26,12 +27,14 @@ import {
   AppstoreOutlined,
   PictureOutlined,
   LinkOutlined,
+  DeleteOutlined,
 } from "@ant-design/icons";
 import {
   getAttributes,
   createAttribute,
   createAttributeValue,
   deleteAttributeValue,
+  deleteAttribute,
 } from "../../api/productsApi";
 
 const { Text, Title } = Typography;
@@ -372,7 +375,15 @@ export default function AttributesPage() {
     open: false,
     attribute: null,
   });
-
+  const handleDeleteAttribute = async (id) => {
+    try {
+      await deleteAttribute(id);
+      message.success("تم حذف الخاصية بنجاح");
+      fetchAttributes();
+    } catch (err) {
+      message.error(err.response?.data?.message || "فشل حذف الخاصية");
+    }
+  };
   const fetchAttributes = useCallback(async () => {
     setLoading(true);
     try {
@@ -542,6 +553,24 @@ export default function AttributesPage() {
               القيم
             </Button>
           </Tooltip>
+
+          <Popconfirm
+            title="حذف الخاصية"
+            description={`هل أنت متأكد من حذف "${r.name}"؟`}
+            onConfirm={() => handleDeleteAttribute(r.id)}
+            okText="حذف"
+            cancelText="إلغاء"
+            okButtonProps={{ danger: true }}
+          >
+            <Tooltip title="حذف الخاصية">
+              <Button
+                type="text"
+                size="small"
+                icon={<DeleteOutlined />}
+                style={{ color: "#EF4444" }}
+              />
+            </Tooltip>
+          </Popconfirm>
         </Space>
       ),
     },
