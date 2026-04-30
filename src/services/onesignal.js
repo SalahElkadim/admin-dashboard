@@ -11,7 +11,7 @@
 //   3. Import this file and call initOneSignal() after login.
 // ─────────────────────────────────────────────────────────────
 
-import axiosInstance from "./axiosInstance"; // your existing axios with JWT
+import axiosInstance from "../api/axiosInstance"; // your existing axios with JWT
 
 // ── Helpers ───────────────────────────────────────────────────
 
