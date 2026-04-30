@@ -18,6 +18,7 @@ import {
 } from "@ant-design/icons";
 import { loginApi } from "../../api/authApi";
 import useAuthStore from "../../store/authStore";
+import { initOneSignal } from "../../services/onesignal"; // ← جديد
 
 const { Title, Text, Link } = Typography;
 
@@ -34,6 +35,7 @@ export default function LoginPage() {
       if (data.success) {
         const { access, refresh, user } = data.data;
         setAuth(user, access, refresh);
+        initOneSignal(); // ← جديد: fire-and-forget بعد ما الـ JWT يتحفظ
         message.success("أهلاً " + user.name + "! 👋");
         navigate("/dashboard");
       }
@@ -238,7 +240,6 @@ export default function LoginPage() {
         </div>
 
         <div style={{ marginBottom: 28 }}>
-          {/* Logo on desktop (hidden on mobile since we show it above) */}
           <div
             className="hidden lg:flex"
             style={{
@@ -387,7 +388,6 @@ export default function LoginPage() {
 
       {/* Responsive styles */}
       <style>{`
-        /* Mobile: form takes full width */
         @media (max-width: 1023px) {
           .login-form-panel {
             max-width: 100% !important;
@@ -398,23 +398,17 @@ export default function LoginPage() {
             justify-content: center;
           }
         }
-
-        /* Small phones */
         @media (max-width: 374px) {
           .login-form-panel {
             padding: 32px 16px !important;
           }
         }
-
-        /* Make inputs bigger touch targets on mobile */
         @media (max-width: 1023px) {
           .ant-input-affix-wrapper,
           .ant-input {
             min-height: 48px !important;
           }
         }
-
-        /* Antd dark input text fix */
         .ant-input,
         .ant-input-password input {
           color: #fff !important;
@@ -440,8 +434,6 @@ export default function LoginPage() {
           background-color: #6366F1 !important;
           border-color: #6366F1 !important;
         }
-        
-        /* Hide/show helpers */
         .hidden { display: none !important; }
         @media (min-width: 1024px) {
           .hidden.lg\\:flex { display: flex !important; }

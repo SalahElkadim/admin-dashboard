@@ -39,6 +39,8 @@ import useNotificationStore from "../store/notificationStore";
 import { getProducts } from "../api/productsApi";
 import { getOrders } from "../api/ordersapi";
 import { getCustomers } from "../api/customersApi";
+import NotificationToggle from "../components/NotificationToggle"; // ← جديد
+import { unsubscribe } from "../services/onesignal"; // ← جديد
 
 const { Sider, Header, Content } = Layout;
 const { Text } = Typography;
@@ -98,13 +100,11 @@ function SearchModal({ open, onClose, navigate }) {
     }
   }, []);
 
-  // Debounce 400ms
   useEffect(() => {
     const t = setTimeout(() => doSearch(query), 400);
     return () => clearTimeout(t);
   }, [query, doSearch]);
 
-  // Reset on close
   useEffect(() => {
     if (!open) {
       setQuery("");
@@ -140,7 +140,6 @@ function SearchModal({ open, onClose, navigate }) {
       style={{ direction: "rtl", top: 80 }}
       styles={{ body: { padding: 0 } }}
     >
-      {/* Input */}
       <div style={{ padding: "16px 20px", borderBottom: "1px solid #F1F5F9" }}>
         <Input
           autoFocus
@@ -155,7 +154,6 @@ function SearchModal({ open, onClose, navigate }) {
         />
       </div>
 
-      {/* Results */}
       <div style={{ maxHeight: 460, overflowY: "auto", padding: "8px 0" }}>
         {!query.trim() ? (
           <div style={{ padding: "32px 0", textAlign: "center" }}>
@@ -187,7 +185,6 @@ function SearchModal({ open, onClose, navigate }) {
           />
         ) : (
           <>
-            {/* ── Products ── */}
             {results.products.length > 0 && (
               <div>
                 <Text
@@ -265,7 +262,6 @@ function SearchModal({ open, onClose, navigate }) {
               <Divider style={{ margin: "4px 0" }} />
             )}
 
-            {/* ── Orders ── */}
             {results.orders.length > 0 && (
               <div>
                 <Text
@@ -329,7 +325,6 @@ function SearchModal({ open, onClose, navigate }) {
               <Divider style={{ margin: "4px 0" }} />
             )}
 
-            {/* ── Customers ── */}
             {results.customers.length > 0 && (
               <div>
                 <Text
@@ -385,7 +380,6 @@ function SearchModal({ open, onClose, navigate }) {
         )}
       </div>
 
-      {/* Footer */}
       <div style={{ padding: "10px 20px", borderTop: "1px solid #F1F5F9" }}>
         <Text style={{ color: "#CBD5E1", fontSize: 11 }}>
           ESC للإغلاق · Ctrl+K لفتح البحث
@@ -409,7 +403,6 @@ export default function DashboardLayout() {
     fetchUnreadCount();
   }, [fetchUnreadCount]);
 
-  // Ctrl+K لفتح البحث
   useEffect(() => {
     const handler = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "k") {
@@ -421,7 +414,13 @@ export default function DashboardLayout() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
+  // ← تعديل: unsubscribe قبل الـ logout
   const handleLogout = async () => {
+    try {
+      await unsubscribe(); // ← جديد: إلغاء تسجيل الجهاز من OneSignal
+    } catch {
+      /* silent */
+    }
     try {
       const { logoutApi } = await import("../api/authApi");
       await logoutApi(refreshToken);
@@ -449,14 +448,9 @@ export default function DashboardLayout() {
     },
   };
 
-  // ✅ دالة معالجة الضغط على عناصر القائمة
   const handleMenuClick = ({ key }) => {
-    // إذا كان المسار هو /system (النظام)
-    if (key === "/system") {
-      navigate("/erp");
-    } else {
-      navigate(key);
-    }
+    if (key === "/system") navigate("/erp");
+    else navigate(key);
   };
 
   return (
@@ -621,6 +615,11 @@ export default function DashboardLayout() {
               />
             </Tooltip>
 
+            {/* ← جديد: زرار تفعيل/تعطيل الـ push notifications */}
+            <Tooltip title="إشعارات الجهاز">
+              <NotificationToggle />
+            </Tooltip>
+
             <Tooltip title="الإشعارات">
               <Badge count={unreadCount} size="small">
                 <Button
@@ -658,7 +657,6 @@ export default function DashboardLayout() {
         </Content>
       </Layout>
 
-      {/* ✅ Search Modal */}
       <SearchModal
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
