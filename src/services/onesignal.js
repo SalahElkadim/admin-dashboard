@@ -2,7 +2,6 @@
 // src/services/onesignal.js
 //
 // Works with the OneSignal v16 CDN snippet (no npm package needed).
-//
 // SETUP:
 //   1. Paste the OneSignal <script> block into public/index.html
 //      (replace the appId / safari_web_id with yours — already done)
