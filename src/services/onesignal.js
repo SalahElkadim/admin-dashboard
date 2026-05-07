@@ -89,13 +89,13 @@ export async function initOneSignal() {
 
   // v16: listen for subscription changes
   os.User?.PushSubscription?.addEventListener("change", async (event) => {
-    if (event.current?.isSubscribed) {
+    if (event.current?.optedIn) {
       await _registerDevice(os);
     }
   });
 
   // Already subscribed from a previous session → sync immediately
-  const isSubscribed = os.User?.PushSubscription?.isSubscribed;
+  const isSubscribed = os.User?.PushSubscription?.optedIn;
   if (isSubscribed) {
     await _registerDevice(os);
   }
@@ -155,5 +155,5 @@ export async function getPermissionState() {
 export async function isSubscribed() {
   const os = await waitForOneSignal();
   if (!os) return false;
-  return os.User?.PushSubscription?.isSubscribed ?? false;
+  return os.User?.PushSubscription?.optedIn ?? false;
 }
