@@ -14,10 +14,6 @@ import axiosInstance from "../api/axiosInstance"; // your existing axios with JW
 
 // ── Helpers ───────────────────────────────────────────────────
 
-/**
- * Wait for the OneSignal SDK to finish loading.
- * Returns the OneSignal instance or null if it never loads.
- */
 function waitForOneSignal(timeoutMs = 5000) {
   return new Promise((resolve) => {
     if (window.OneSignal?.User) {
@@ -32,7 +28,6 @@ function waitForOneSignal(timeoutMs = 5000) {
       setTimeout(check, 200);
     };
 
-    // Use OneSignalDeferred if the SDK hasn't run yet
     if (Array.isArray(window.OneSignalDeferred)) {
       window.OneSignalDeferred.push((os) => resolve(os));
     } else {
@@ -45,19 +40,20 @@ function waitForOneSignal(timeoutMs = 5000) {
 
 async function _registerDevice(os) {
   try {
-    // v16 SDK: player ID lives at OneSignal.User.PushSubscription.id
     const sub = os.User?.PushSubscription;
     if (!sub) return;
 
-    // id might be null while the subscription is being set up
     let playerId = sub.id;
+
     if (!playerId) {
-      // wait up to 3 s for it to appear
       await new Promise((res) => setTimeout(res, 3000));
       playerId = os.User?.PushSubscription?.id;
     }
 
-    if (!playerId) return;
+    if (!playerId) {
+      console.warn("[OneSignal] no player ID found");
+      return;
+    }
 
     await axiosInstance.post("/api/admin/push/register/", {
       player_id: playerId,
@@ -72,11 +68,6 @@ async function _registerDevice(os) {
 
 let _ready = false;
 
-/**
- * Call this once after the user logs in.
- * Initialisation already happened via the <script> in index.html,
- * so here we just wire up the subscription listener + sync state.
- */
 export async function initOneSignal() {
   console.log("[DEBUG] initOneSignal called, _ready=", _ready);
   if (_ready) return;
@@ -101,9 +92,9 @@ export async function initOneSignal() {
     }
   });
 
-  // Already subscribed from a previous session → sync immediately
-  if (isSubscribed) {
-    console.log("[DEBUG] already subscribed, registering device...");
+  // ← التعديل هنا: سجل الـ device لو عنده playerId حتى لو optedIn = false
+  if (isSubscribed || playerId) {
+    console.log("[DEBUG] has playerId or subscribed, registering device...");
     await _registerDevice(os);
   } else {
     console.log(
@@ -112,24 +103,16 @@ export async function initOneSignal() {
   }
 }
 
-/**
- * Show the browser's native permission prompt.
- * Attach this to your "Enable notifications" button.
- */
 export async function requestPermission() {
   const os = await waitForOneSignal();
   if (!os) return;
   try {
-    // v16 API
     await os.Notifications.requestPermission();
   } catch (err) {
     console.warn("[OneSignal] permission request failed:", err);
   }
 }
 
-/**
- * Unsubscribe this device and notify the backend.
- */
 export async function unsubscribe() {
   const os = await waitForOneSignal();
   if (!os) return;
@@ -146,23 +129,16 @@ export async function unsubscribe() {
   }
 }
 
-/**
- * Returns: 'granted' | 'denied' | 'default'
- */
 export async function getPermissionState() {
   const os = await waitForOneSignal();
   if (!os) return "default";
   try {
-    // v16: Notification.permission is a standard browser value
     return os.Notifications.permissionNative ?? "default";
   } catch {
     return "default";
   }
 }
 
-/**
- * Returns true if the current device is actively subscribed.
- */
 export async function isSubscribed() {
   const os = await waitForOneSignal();
   if (!os) return false;
