@@ -78,26 +78,37 @@ let _ready = false;
  * so here we just wire up the subscription listener + sync state.
  */
 export async function initOneSignal() {
+  console.log("[DEBUG] initOneSignal called, _ready=", _ready);
   if (_ready) return;
   _ready = true;
 
   const os = await waitForOneSignal();
+  console.log("[DEBUG] os loaded=", os ? "✅" : "❌ null");
   if (!os) {
     console.warn("[OneSignal] SDK did not load in time.");
     return;
   }
 
+  const isSubscribed = os.User?.PushSubscription?.optedIn;
+  const playerId = os.User?.PushSubscription?.id;
+  console.log("[DEBUG] optedIn=", isSubscribed, "| playerId=", playerId);
+
   // v16: listen for subscription changes
   os.User?.PushSubscription?.addEventListener("change", async (event) => {
+    console.log("[DEBUG] subscription changed:", event.current);
     if (event.current?.optedIn) {
       await _registerDevice(os);
     }
   });
 
   // Already subscribed from a previous session → sync immediately
-  const isSubscribed = os.User?.PushSubscription?.optedIn;
   if (isSubscribed) {
+    console.log("[DEBUG] already subscribed, registering device...");
     await _registerDevice(os);
+  } else {
+    console.log(
+      "[DEBUG] not subscribed yet — user needs to enable notifications"
+    );
   }
 }
 
