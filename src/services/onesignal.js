@@ -55,7 +55,7 @@ async function _registerDevice(os) {
       return;
     }
 
-    await axiosInstance.post("/api/admin/push/register/", {
+    await axiosInstance.post("/push/register/", {
       player_id: playerId,
     });
     console.info("[OneSignal] device registered:", playerId.slice(0, 8) + "…");
@@ -120,7 +120,7 @@ export async function unsubscribe() {
     const playerId = os.User?.PushSubscription?.id;
     await os.User?.PushSubscription?.optOut();
     if (playerId) {
-      await axiosInstance.post("/api/admin/push/unregister/", {
+      await axiosInstance.post("/push/unregister/", {
         player_id: playerId,
       });
     }
