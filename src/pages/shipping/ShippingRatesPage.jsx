@@ -61,7 +61,12 @@ export default function ShippingRatesPage() {
     setLoading(true);
     try {
       const res = await api.get("/shipping-rates/?page_size=100");
-      setRates(res.data.results || res.data.data || []);
+      const data = res.data;
+      setRates(
+        Array.isArray(data)
+          ? data
+          : data.results ?? data.data?.results ?? data.data ?? []
+      );
     } finally {
       setLoading(false);
     }

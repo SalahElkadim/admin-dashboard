@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   Table,
   Button,
@@ -22,6 +22,7 @@ import {
   Form,
   Divider,
   InputNumber,
+  Spin,
 } from "antd";
 import {
   SearchOutlined,
@@ -42,7 +43,7 @@ import {
   GiftOutlined,
   DeleteOutlined,
   PlusOutlined,
-  MinusCircleOutlined,
+  DeleteFilled,
 } from "@ant-design/icons";
 import {
   getOrders,
@@ -53,12 +54,13 @@ import {
   deleteOrder,
 } from "../../api/ordersapi";
 import axios from "axios";
+import axiosInstance from "../../api/axiosInstance";
 
 const { Text, Title } = Typography;
 const { Option } = Select;
 const { TextArea } = Input;
 
-// ── Constants ──────────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const STATUS_META = {
   pending: {
@@ -99,7 +101,6 @@ const ALLOWED_TRANSITIONS = {
   refunded: [],
 };
 
-// حالات لا يمكن تعديل الأوردر فيها
 const NON_EDITABLE_STATUSES = ["delivered", "refunded"];
 
 const fmtMoney = (v) =>
@@ -109,20 +110,23 @@ const fmtMoney = (v) =>
     maximumFractionDigits: 2,
   });
 
+const fmt = (v) =>
+  Number(v || 0).toLocaleString("ar-EG", { minimumFractionDigits: 2 });
+
 const extractData = (data) => data?.data ?? data;
 const extractList = (data) =>
   data?.results ?? data?.data?.results ?? data?.data ?? [];
 const extractCount = (data, list) =>
   data?.count ?? data?.data?.count ?? list.length;
 
-// ── WhatsApp Icon ──────────────────────────────────────────────────────────────
+// ── WhatsApp Icon ─────────────────────────────────────────────────────────────
 const WhatsAppIcon = ({ size = 13, color = "#25D366" }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
   </svg>
 );
 
-// ── Order Status Steps ─────────────────────────────────────────────────────────
+// ── Order Status Steps ────────────────────────────────────────────────────────
 const ORDER_STEPS = ["pending", "confirmed", "shipped", "delivered"];
 
 function OrderStatusSteps({ status }) {
@@ -151,10 +155,9 @@ function OrderStatusSteps({ status }) {
       </div>
     );
   }
-  const current = ORDER_STEPS.indexOf(status);
   return (
     <Steps
-      current={current}
+      current={ORDER_STEPS.indexOf(status)}
       size="small"
       items={ORDER_STEPS.map((s) => ({
         title: STATUS_META[s]?.label,
@@ -165,7 +168,7 @@ function OrderStatusSteps({ status }) {
   );
 }
 
-// ── Update Status Modal ────────────────────────────────────────────────────────
+// ── Update Status Modal ───────────────────────────────────────────────────────
 function UpdateStatusModal({ open, order, onClose, onUpdated }) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -256,39 +259,581 @@ function UpdateStatusModal({ open, order, onClose, onUpdated }) {
   );
 }
 
-// ── Edit Order Modal ───────────────────────────────────────────────────────────
+// ── ProductItemPicker ─────────────────────────────────────────────────────────
+function ProductItemPicker({ onAdd }) {
+  const [query, setQuery] = useState("");
+  const [products, setProducts] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [variant, setVariant] = useState(null);
+  const [qty, setQty] = useState(1);
+  const [loadingVariants, setLoadingVariants] = useState(false);
+  const debounceRef = useRef(null);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target))
+        setProducts([]);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const searchProducts = useCallback(async (q) => {
+    if (!q || q.length < 2) {
+      setProducts([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const res = await axiosInstance.get("/products/", {
+        params: { search: q, page_size: 20, status: "active" },
+      });
+      const d = res.data;
+      setProducts(d?.results ?? d?.data?.results ?? d ?? []);
+    } catch {
+      setProducts([]);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  const handleQueryChange = (val) => {
+    setQuery(val);
+    setSelected(null);
+    setVariant(null);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => searchProducts(val), 350);
+  };
+
+  const handleSelectProduct = async (prod) => {
+    setProducts([]);
+    setQuery(prod.name);
+    setLoadingVariants(true);
+    try {
+      const res = await axiosInstance.get(`/products/${prod.id}/variants/`);
+      const raw = res.data;
+      const variants = raw?.results ?? raw?.data?.results ?? raw ?? [];
+      setSelected({ ...prod, variants });
+      const active = variants.filter((v) => v.is_active !== false);
+      setVariant(active.length === 1 ? active[0] : null);
+      setQty(1);
+    } catch {
+      message.error("فشل في جلب المتغيرات");
+    } finally {
+      setLoadingVariants(false);
+    }
+  };
+
+  const handleAdd = () => {
+    if (!selected) {
+      message.warning("اختر منتجاً أولاً");
+      return;
+    }
+    const activeVariants =
+      selected.variants?.filter((v) => v.is_active !== false) ?? [];
+    if (activeVariants.length > 0 && !variant) {
+      message.warning("اختر الـ variant أولاً");
+      return;
+    }
+    if (!qty || qty < 1) {
+      message.warning("الكمية 1 على الأقل");
+      return;
+    }
+
+    const price = Number(
+      variant?.effective_price ??
+        variant?.price_override ??
+        selected?.effective_price ??
+        selected?.price ??
+        0
+    );
+    const variantLabel = variant
+      ? variant.attribute_values?.map((av) => av.value).join(" / ") ||
+        `#${variant.id}`
+      : "";
+
+    onAdd({
+      product: selected.id,
+      variant: variant?.id ?? null,
+      quantity: qty,
+      _product_name: selected.name,
+      _variant_name: variantLabel,
+      _unit_price: price,
+      _image: selected.primary_image ?? null,
+    });
+
+    setQuery("");
+    setSelected(null);
+    setVariant(null);
+    setQty(1);
+  };
+
+  const activeVariants =
+    selected?.variants?.filter((v) => v.is_active !== false) ?? [];
+  const unitPrice = Number(
+    variant?.effective_price ??
+      variant?.price_override ??
+      selected?.effective_price ??
+      selected?.price ??
+      0
+  );
+  const canAdd = selected && (activeVariants.length === 0 || variant);
+
+  return (
+    <div
+      style={{
+        background: "#F8FAFC",
+        borderRadius: 10,
+        padding: "12px 14px",
+        border: "1px dashed #CBD5E1",
+        marginBottom: 10,
+      }}
+    >
+      <Text
+        style={{
+          fontSize: 12,
+          fontWeight: 600,
+          color: "#475569",
+          display: "block",
+          marginBottom: 8,
+        }}
+      >
+        ابحث عن منتج وأضفه للأوردر
+      </Text>
+
+      <div style={{ position: "relative", marginBottom: 8 }} ref={dropdownRef}>
+        <Input
+          prefix={<SearchOutlined style={{ color: "#94A3B8" }} />}
+          suffix={searching && <Spin size="small" />}
+          placeholder="ابحث باسم المنتج..."
+          value={query}
+          onChange={(e) => handleQueryChange(e.target.value)}
+          allowClear
+          onClear={() => {
+            setQuery("");
+            setProducts([]);
+            setSelected(null);
+            setVariant(null);
+          }}
+          size="small"
+        />
+        {products.length > 0 && (
+          <div
+            style={{
+              position: "absolute",
+              top: "calc(100% + 4px)",
+              right: 0,
+              left: 0,
+              zIndex: 1050,
+              background: "#fff",
+              border: "1px solid #E2E8F0",
+              borderRadius: 10,
+              boxShadow: "0 8px 24px rgba(0,0,0,.1)",
+              maxHeight: 260,
+              overflowY: "auto",
+            }}
+          >
+            {products.map((p) => (
+              <div
+                key={p.id}
+                onClick={() => handleSelectProduct(p)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "9px 12px",
+                  cursor: "pointer",
+                  borderBottom: "1px solid #F8FAFC",
+                  transition: "background .12s",
+                }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.background = "#F0FDF4")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.background = "transparent")
+                }
+              >
+                <Avatar
+                  size={34}
+                  src={p.primary_image}
+                  shape="square"
+                  style={{
+                    borderRadius: 6,
+                    background: "#EEF2FF",
+                    flexShrink: 0,
+                    fontSize: 16,
+                  }}
+                >
+                  📦
+                </Avatar>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Text
+                    style={{
+                      fontWeight: 600,
+                      fontSize: 13,
+                      display: "block",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {p.name}
+                  </Text>
+                  <Text style={{ fontSize: 11, color: "#94A3B8" }}>
+                    {fmt(p.effective_price ?? p.price)} ج.م
+                    {p.total_stock !== undefined && (
+                      <span
+                        style={{
+                          marginRight: 6,
+                          fontWeight: 600,
+                          color: p.total_stock > 0 ? "#10B981" : "#EF4444",
+                        }}
+                      >
+                        {p.total_stock > 0
+                          ? ` ● ${p.total_stock} متاح`
+                          : " ● نفد"}
+                      </span>
+                    )}
+                  </Text>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {loadingVariants && (
+        <div style={{ textAlign: "center", padding: "6px 0" }}>
+          <Spin size="small" />
+          <Text style={{ marginRight: 8, fontSize: 12, color: "#94A3B8" }}>
+            جاري تحميل المتغيرات...
+          </Text>
+        </div>
+      )}
+
+      {selected && !loadingVariants && activeVariants.length > 1 && (
+        <div style={{ marginBottom: 8 }}>
+          <Text
+            style={{
+              fontSize: 11,
+              color: "#475569",
+              display: "block",
+              marginBottom: 3,
+              fontWeight: 600,
+            }}
+          >
+            اختر المتغير (مطلوب)
+          </Text>
+          <Select
+            placeholder="اختر الحجم أو اللون..."
+            size="small"
+            style={{ width: "100%" }}
+            value={variant?.id ?? undefined}
+            onChange={(id) =>
+              setVariant(activeVariants.find((v) => v.id === id))
+            }
+          >
+            {activeVariants.map((v) => {
+              const label =
+                v.attribute_values?.map((av) => av.value).join(" / ") ||
+                `#${v.id}`;
+              const price = Number(
+                v.effective_price ?? v.price_override ?? selected.price ?? 0
+              );
+              return (
+                <Option key={v.id} value={v.id} disabled={v.stock === 0}>
+                  <div
+                    style={{ display: "flex", justifyContent: "space-between" }}
+                  >
+                    <span style={{ fontWeight: 600 }}>{label}</span>
+                    <span>
+                      <span
+                        style={{
+                          color: "#10B981",
+                          fontWeight: 700,
+                          marginLeft: 8,
+                        }}
+                      >
+                        {fmt(price)} ج.م
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          marginLeft: 6,
+                          color: v.stock > 0 ? "#94A3B8" : "#EF4444",
+                        }}
+                      >
+                        {v.stock > 0 ? `(${v.stock})` : "(نفد)"}
+                      </span>
+                    </span>
+                  </div>
+                </Option>
+              );
+            })}
+          </Select>
+        </div>
+      )}
+
+      {selected && !loadingVariants && activeVariants.length === 0 && (
+        <div
+          style={{
+            background: "#FFF7ED",
+            borderRadius: 8,
+            padding: "7px 10px",
+            marginBottom: 8,
+            fontSize: 12,
+            color: "#92400E",
+          }}
+        >
+          هذا المنتج ليس له متغيرات — السعر:{" "}
+          {fmt(selected.effective_price ?? selected.price)} ج.م
+        </div>
+      )}
+
+      {selected && !loadingVariants && (
+        <Row gutter={8} align="bottom">
+          <Col span={8}>
+            <Text
+              style={{
+                fontSize: 11,
+                color: "#475569",
+                display: "block",
+                marginBottom: 3,
+                fontWeight: 600,
+              }}
+            >
+              الكمية
+            </Text>
+            <InputNumber
+              min={1}
+              value={qty}
+              onChange={(v) => setQty(v)}
+              style={{ width: "100%" }}
+              size="small"
+            />
+          </Col>
+          <Col span={8}>
+            <Text
+              style={{
+                fontSize: 11,
+                color: "#475569",
+                display: "block",
+                marginBottom: 3,
+                fontWeight: 600,
+              }}
+            >
+              السعر
+            </Text>
+            <Text
+              style={{
+                fontWeight: 700,
+                color: canAdd ? "#10B981" : "#94A3B8",
+                lineHeight: "24px",
+              }}
+            >
+              {fmt(unitPrice * (qty || 0))} ج.م
+            </Text>
+          </Col>
+          <Col span={8}>
+            <Button
+              type="primary"
+              block
+              size="small"
+              icon={<PlusOutlined />}
+              onClick={handleAdd}
+              disabled={!canAdd}
+              style={{
+                background: canAdd ? "#10B981" : undefined,
+                borderColor: canAdd ? "#10B981" : undefined,
+                borderRadius: 8,
+              }}
+            >
+              أضف
+            </Button>
+          </Col>
+        </Row>
+      )}
+    </div>
+  );
+}
+
+// ── ItemsList ─────────────────────────────────────────────────────────────────
+function ItemsList({ items, onRemove, onQtyChange }) {
+  if (items.length === 0) {
+    return (
+      <div
+        style={{
+          textAlign: "center",
+          padding: "16px 0",
+          color: "#94A3B8",
+          fontSize: 13,
+          background: "#F8FAFC",
+          borderRadius: 8,
+          border: "1px dashed #CBD5E1",
+        }}
+      >
+        لا توجد منتجات — ابحث وأضف منتجاً
+      </div>
+    );
+  }
+  return (
+    <div>
+      {items.map((item, idx) => (
+        <div
+          key={idx}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "9px 12px",
+            borderRadius: 10,
+            background: idx % 2 === 0 ? "#FAFBFF" : "#fff",
+            border: "1px solid #E2E8F0",
+            marginBottom: 6,
+          }}
+        >
+          <Avatar
+            size={34}
+            src={item._image}
+            shape="square"
+            style={{
+              borderRadius: 6,
+              background: "#EEF2FF",
+              flexShrink: 0,
+              fontSize: 15,
+            }}
+          >
+            📦
+          </Avatar>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Text
+              style={{
+                fontWeight: 600,
+                fontSize: 13,
+                display: "block",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {item._product_name || `منتج #${item.product}`}
+            </Text>
+            <Text style={{ fontSize: 11, color: "#94A3B8" }}>
+              {item._variant_name || "—"}
+              {item._unit_price ? (
+                <span style={{ marginRight: 6, color: "#64748B" }}>
+                  {fmt(item._unit_price)} ج.م/قطعة
+                </span>
+              ) : null}
+            </Text>
+          </div>
+          <div>
+            <Text
+              style={{
+                fontSize: 10,
+                color: "#94A3B8",
+                display: "block",
+                textAlign: "center",
+              }}
+            >
+              كمية
+            </Text>
+            <InputNumber
+              size="small"
+              min={1}
+              value={item.quantity}
+              onChange={(v) => onQtyChange(idx, v)}
+              style={{ width: 60 }}
+            />
+          </div>
+          {item._unit_price && (
+            <div style={{ textAlign: "center", minWidth: 68 }}>
+              <Text
+                style={{ fontSize: 10, color: "#94A3B8", display: "block" }}
+              >
+                الإجمالي
+              </Text>
+              <Text style={{ fontWeight: 700, color: "#10B981", fontSize: 12 }}>
+                {fmt(Number(item._unit_price) * Number(item.quantity))} ج.م
+              </Text>
+            </div>
+          )}
+          <Tooltip
+            title={items.length === 1 ? "لا يمكن حذف المنتج الأخير" : "حذف"}
+          >
+            <Button
+              type="text"
+              danger
+              size="small"
+              icon={<DeleteFilled />}
+              disabled={items.length === 1}
+              onClick={() => onRemove(idx)}
+              style={{ marginTop: 12, opacity: items.length === 1 ? 0.35 : 1 }}
+            />
+          </Tooltip>
+        </div>
+      ))}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          marginTop: 4,
+          padding: "7px 12px",
+          background: "#F0FDF4",
+          borderRadius: 8,
+          border: "1px solid #BBF7D0",
+        }}
+      >
+        <Text style={{ fontWeight: 800, color: "#059669", fontSize: 13 }}>
+          إجمالي المنتجات:{" "}
+          {fmt(
+            items.reduce(
+              (s, it) => s + Number(it._unit_price || 0) * Number(it.quantity),
+              0
+            )
+          )}{" "}
+          ج.م
+        </Text>
+      </div>
+    </div>
+  );
+}
+
+// ── Edit Order Modal ──────────────────────────────────────────────────────────
 function EditOrderModal({ open, order, onClose, onUpdated }) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState([]);
 
-  // ملء الفورم لما يفتح
   useEffect(() => {
-    if (open && order) {
-      form.setFieldsValue({
-        shipping_name: order.shipping_name || "",
-        shipping_phone: order.shipping_phone || "",
-        whatsapp_number: order.whatsapp_number || "",
-        shipping_address: order.shipping_address || "",
-        shipping_city: order.shipping_city || "",
-        shipping_country: order.shipping_country || "",
-        shipping_postal_code: order.shipping_postal_code || "",
-        payment_method: order.payment_method || undefined,
-        payment_status: order.payment_status || undefined,
-        shipping_cost: Number(order.shipping_cost) || 0,
-        notes: order.notes || "",
-        items:
-          order.items?.map((item) => ({
-            product: item.product,
-            variant: item.variant,
-            quantity: item.quantity,
-            // للعرض فقط
-            _product_name: item.product_name,
-            _variant_name: item.variant_name,
-            _unit_price: item.unit_price,
-          })) || [],
-      });
-    }
-  }, [open, order, form]);
+    if (!open || !order) return;
+    form.setFieldsValue({
+      shipping_name: order.shipping_name || "",
+      shipping_phone: order.shipping_phone || "",
+      whatsapp_number: order.whatsapp_number || "",
+      shipping_address: order.shipping_address || "",
+      shipping_city: order.shipping_city || "",
+      shipping_country: order.shipping_country || "",
+      shipping_postal_code: order.shipping_postal_code || "",
+      payment_method: order.payment_method || undefined,
+      payment_status: order.payment_status || undefined,
+      shipping_cost: Number(order.shipping_cost) || 0,
+      notes: order.notes || "",
+    });
+    setItems(
+      (order.items || []).map((it) => ({
+        product: it.product,
+        variant: it.variant ?? null,
+        quantity: it.quantity,
+        _product_name: it.product_name,
+        _variant_name: it.variant_name || "",
+        _unit_price: Number(it.unit_price),
+        _image: it.product_image ?? null,
+      }))
+    );
+  }, [open, order]);
 
   const handleOk = async () => {
     let values;
@@ -297,10 +842,13 @@ function EditOrderModal({ open, order, onClose, onUpdated }) {
     } catch {
       return;
     }
+    if (items.length === 0) {
+      message.warning("لازم يكون في منتج واحد على الأقل");
+      return;
+    }
 
     setLoading(true);
     try {
-      // نرسل فقط الحقول القابلة للتعديل (بدون _product_name وغيرها)
       const payload = {
         shipping_name: values.shipping_name,
         shipping_phone: values.shipping_phone,
@@ -313,13 +861,12 @@ function EditOrderModal({ open, order, onClose, onUpdated }) {
         payment_status: values.payment_status,
         shipping_cost: values.shipping_cost,
         notes: values.notes,
-        items: values.items.map(({ product, variant, quantity }) => ({
+        items: items.map(({ product, variant, quantity }) => ({
           product,
           variant: variant || null,
           quantity,
         })),
       };
-
       await axios.patch(`/api/admin/orders/${order.id}/edit/`, payload);
       message.success("تم تحديث الأوردر بنجاح ✅");
       onUpdated();
@@ -354,16 +901,13 @@ function EditOrderModal({ open, order, onClose, onUpdated }) {
           <Text style={{ fontWeight: 700 }}>
             تعديل الطلب #{order?.order_number}
           </Text>
-          {isNonEditable && (
-            <Tag color="red" style={{ borderRadius: 6, marginRight: 8 }}>
-              لا يمكن التعديل
-            </Tag>
-          )}
         </Space>
       }
-      width={720}
-      style={{ direction: "rtl" }}
-      styles={{ body: { maxHeight: "75vh", overflowY: "auto" } }}
+      width={760}
+      style={{ direction: "rtl", top: 16 }}
+      styles={{
+        body: { maxHeight: "82vh", overflowY: "auto", paddingRight: 8 },
+      }}
     >
       {isNonEditable ? (
         <div
@@ -380,15 +924,15 @@ function EditOrderModal({ open, order, onClose, onUpdated }) {
           </Text>
         </div>
       ) : (
-        <Form form={form} layout="vertical" requiredMark={false}>
-          {/* ── بيانات الشحن ── */}
+        <Form form={form} layout="vertical" style={{ marginTop: 8 }}>
+          {/* بيانات الشحن */}
           <div
             style={{
               background: "#F8FAFC",
               borderRadius: 10,
-              padding: "16px 16px 4px",
+              padding: "14px 16px 4px",
               border: "1px solid #E2E8F0",
-              marginBottom: 16,
+              marginBottom: 14,
             }}
           >
             <Text
@@ -396,7 +940,7 @@ function EditOrderModal({ open, order, onClose, onUpdated }) {
                 fontWeight: 600,
                 color: "#0F172A",
                 display: "block",
-                marginBottom: 12,
+                marginBottom: 10,
               }}
             >
               📦 بيانات الشحن
@@ -456,14 +1000,14 @@ function EditOrderModal({ open, order, onClose, onUpdated }) {
             </Row>
           </div>
 
-          {/* ── الدفع والتكاليف ── */}
+          {/* الدفع */}
           <div
             style={{
               background: "#F8FAFC",
               borderRadius: 10,
-              padding: "16px 16px 4px",
+              padding: "14px 16px 4px",
               border: "1px solid #E2E8F0",
-              marginBottom: 16,
+              marginBottom: 14,
             }}
           >
             <Text
@@ -471,7 +1015,7 @@ function EditOrderModal({ open, order, onClose, onUpdated }) {
                 fontWeight: 600,
                 color: "#0F172A",
                 display: "block",
-                marginBottom: 12,
+                marginBottom: 10,
               }}
             >
               💳 الدفع والتكاليف
@@ -500,7 +1044,7 @@ function EditOrderModal({ open, order, onClose, onUpdated }) {
                 </Form.Item>
               </Col>
               <Col span={8}>
-                <Form.Item name="shipping_cost" label="تكلفة الشحن ($)">
+                <Form.Item name="shipping_cost" label="تكلفة الشحن (ج.م)">
                   <InputNumber
                     min={0}
                     step={0.5}
@@ -512,14 +1056,14 @@ function EditOrderModal({ open, order, onClose, onUpdated }) {
             </Row>
           </div>
 
-          {/* ── المنتجات ── */}
+          {/* المنتجات */}
           <div
             style={{
               background: "#F8FAFC",
               borderRadius: 10,
-              padding: "16px 16px 4px",
+              padding: "14px 16px 10px",
               border: "1px solid #E2E8F0",
-              marginBottom: 16,
+              marginBottom: 14,
             }}
           >
             <Text
@@ -527,149 +1071,63 @@ function EditOrderModal({ open, order, onClose, onUpdated }) {
                 fontWeight: 600,
                 color: "#0F172A",
                 display: "block",
-                marginBottom: 12,
+                marginBottom: 10,
               }}
             >
               🛍️ المنتجات
-            </Text>
-            <Form.List
-              name="items"
-              rules={[
-                {
-                  validator: async (_, items) => {
-                    if (!items || items.length === 0)
-                      return Promise.reject(
-                        new Error("لازم يكون في منتج واحد على الأقل")
-                      );
-                  },
-                },
-              ]}
-            >
-              {(fields, { add, remove }, { errors }) => (
-                <>
-                  {fields.map(({ key, name, ...restField }) => {
-                    const item = form.getFieldValue(["items", name]) || {};
-                    return (
-                      <div
-                        key={key}
-                        style={{
-                          display: "flex",
-                          alignItems: "flex-start",
-                          gap: 8,
-                          background: "#fff",
-                          borderRadius: 8,
-                          padding: "10px 12px",
-                          border: "1px solid #E2E8F0",
-                          marginBottom: 8,
-                        }}
-                      >
-                        {/* معلومات المنتج (للقراءة فقط) */}
-                        <div style={{ flex: 1 }}>
-                          <Text
-                            style={{
-                              fontWeight: 600,
-                              fontSize: 13,
-                              display: "block",
-                            }}
-                          >
-                            {item._product_name || `منتج #${item.product}`}
-                          </Text>
-                          {item._variant_name && (
-                            <Text style={{ color: "#94A3B8", fontSize: 11 }}>
-                              {item._variant_name}
-                            </Text>
-                          )}
-                          {item._unit_price && (
-                            <Text
-                              style={{
-                                color: "#6366F1",
-                                fontSize: 11,
-                                display: "block",
-                              }}
-                            >
-                              {fmtMoney(item._unit_price)} / الوحدة
-                            </Text>
-                          )}
-                        </div>
-                        {/* الكمية فقط قابلة للتعديل */}
-                        <Form.Item
-                          {...restField}
-                          name={[name, "quantity"]}
-                          rules={[
-                            { required: true, message: "الكمية" },
-                            { type: "number", min: 1, message: "≥ 1" },
-                          ]}
-                          style={{ marginBottom: 0, width: 100 }}
-                          label="الكمية"
-                        >
-                          <InputNumber min={1} style={{ width: "100%" }} />
-                        </Form.Item>
-                        {/* حقول مخفية */}
-                        <Form.Item
-                          {...restField}
-                          name={[name, "product"]}
-                          noStyle
-                        >
-                          <Input type="hidden" />
-                        </Form.Item>
-                        <Form.Item
-                          {...restField}
-                          name={[name, "variant"]}
-                          noStyle
-                        >
-                          <Input type="hidden" />
-                        </Form.Item>
-                        <Form.Item
-                          {...restField}
-                          name={[name, "_product_name"]}
-                          noStyle
-                        >
-                          <Input type="hidden" />
-                        </Form.Item>
-                        <Form.Item
-                          {...restField}
-                          name={[name, "_variant_name"]}
-                          noStyle
-                        >
-                          <Input type="hidden" />
-                        </Form.Item>
-                        <Form.Item
-                          {...restField}
-                          name={[name, "_unit_price"]}
-                          noStyle
-                        >
-                          <Input type="hidden" />
-                        </Form.Item>
-
-                        <Tooltip title="حذف المنتج">
-                          <Button
-                            type="text"
-                            danger
-                            icon={<MinusCircleOutlined />}
-                            onClick={() => {
-                              if (fields.length === 1) {
-                                message.warning(
-                                  "لازم يكون في منتج واحد على الأقل"
-                                );
-                                return;
-                              }
-                              remove(name);
-                            }}
-                            style={{ marginTop: 28 }}
-                          />
-                        </Tooltip>
-                      </div>
-                    );
-                  })}
-                  <Form.ErrorList errors={errors} />
-                </>
+              {items.length > 0 && (
+                <span
+                  style={{
+                    marginRight: 8,
+                    background: "#10B981",
+                    color: "#fff",
+                    borderRadius: 20,
+                    padding: "1px 8px",
+                    fontSize: 11,
+                    fontWeight: 700,
+                  }}
+                >
+                  {items.length}
+                </span>
               )}
-            </Form.List>
+            </Text>
+            <ProductItemPicker
+              onAdd={(newItem) => {
+                const existIdx = items.findIndex(
+                  (it) =>
+                    it.product === newItem.product &&
+                    it.variant === newItem.variant
+                );
+                if (existIdx !== -1) {
+                  setItems((prev) =>
+                    prev.map((it, i) =>
+                      i === existIdx
+                        ? { ...it, quantity: it.quantity + newItem.quantity }
+                        : it
+                    )
+                  );
+                  message.info("تم زيادة الكمية للمنتج الموجود");
+                } else {
+                  setItems((prev) => [...prev, newItem]);
+                }
+              }}
+            />
+            <ItemsList
+              items={items}
+              onRemove={(idx) =>
+                setItems((prev) => prev.filter((_, i) => i !== idx))
+              }
+              onQtyChange={(idx, v) =>
+                setItems((prev) =>
+                  prev.map((it, i) => (i === idx ? { ...it, quantity: v } : it))
+                )
+              }
+            />
           </div>
 
-          {/* ── ملاحظات ── */}
+          {/* ملاحظات */}
           <Form.Item name="notes" label="ملاحظات">
-            <TextArea rows={3} placeholder="أي ملاحظات إضافية على الأوردر..." />
+            <TextArea rows={2} placeholder="أي ملاحظات إضافية على الأوردر..." />
           </Form.Item>
         </Form>
       )}
@@ -677,7 +1135,7 @@ function EditOrderModal({ open, order, onClose, onUpdated }) {
   );
 }
 
-// ── Order Detail Drawer ────────────────────────────────────────────────────────
+// ── Order Detail Drawer ───────────────────────────────────────────────────────
 function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -701,7 +1159,6 @@ function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
     loadOrder();
     onStatusUpdate();
   };
-
   const canEdit = order && !NON_EDITABLE_STATUSES.includes(order.status);
 
   return (
@@ -756,7 +1213,6 @@ function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
       >
         {order && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-            {/* Status Steps */}
             <Card
               style={{ borderRadius: 12, border: "1px solid #E2E8F0" }}
               bodyStyle={{ padding: 20 }}
@@ -774,7 +1230,6 @@ function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
               <OrderStatusSteps status={order.status} />
             </Card>
 
-            {/* KPIs */}
             <Row gutter={12}>
               {[
                 { label: "المجموع الفرعي", value: fmtMoney(order.subtotal) },
@@ -825,7 +1280,6 @@ function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
               ))}
             </Row>
 
-            {/* Status badges */}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <div>
                 <Text style={{ color: "#94A3B8", fontSize: 12 }}>
@@ -862,7 +1316,6 @@ function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
 
             <Divider style={{ margin: "4px 0" }} />
 
-            {/* Items */}
             <div>
               <Text
                 style={{
@@ -949,7 +1402,6 @@ function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
 
             <Divider style={{ margin: "4px 0" }} />
 
-            {/* Customer & Shipping */}
             <Row gutter={16}>
               <Col span={12}>
                 <Card
@@ -1035,7 +1487,6 @@ function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
               </Col>
             </Row>
 
-            {/* Coupon */}
             {order.coupon_code && (
               <div
                 style={{
@@ -1066,7 +1517,6 @@ function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
               </div>
             )}
 
-            {/* Notes */}
             {order.notes && (
               <div
                 style={{
@@ -1092,7 +1542,6 @@ function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
               </div>
             )}
 
-            {/* Payments */}
             {order.payments?.length > 0 && (
               <div>
                 <Text
@@ -1165,7 +1614,7 @@ function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
   );
 }
 
-// ── Main Page ──────────────────────────────────────────────────────────────────
+// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function OrdersPage() {
   const [orders, setOrders] = useState([]);
   const [stats, setStats] = useState({});
@@ -1255,7 +1704,6 @@ export default function OrdersPage() {
     }
   };
 
-  // فتح Edit Modal من الجدول مباشرة (بدون drawer)
   const openEditFromTable = async (record) => {
     try {
       const { data } = await getOrder(record.id);
@@ -1401,27 +1849,21 @@ export default function OrdersPage() {
       title: "حالة الطلب",
       dataIndex: "status",
       width: 130,
-      render: (v) => {
-        const m = STATUS_META[v] || {};
-        return (
-          <Tag color={m.color} style={{ borderRadius: 6 }}>
-            {m.label}
-          </Tag>
-        );
-      },
+      render: (v) => (
+        <Tag color={STATUS_META[v]?.color} style={{ borderRadius: 6 }}>
+          {STATUS_META[v]?.label}
+        </Tag>
+      ),
     },
     {
       title: "الدفع",
       dataIndex: "payment_status",
       width: 120,
-      render: (v) => {
-        const m = PAYMENT_STATUS_META[v] || {};
-        return (
-          <Tag color={m.color} style={{ borderRadius: 6 }}>
-            {m.label}
-          </Tag>
-        );
-      },
+      render: (v) => (
+        <Tag color={PAYMENT_STATUS_META[v]?.color} style={{ borderRadius: 6 }}>
+          {PAYMENT_STATUS_META[v]?.label}
+        </Tag>
+      ),
     },
     {
       title: "طريقة الدفع",
@@ -1494,7 +1936,6 @@ export default function OrdersPage() {
 
   return (
     <div style={{ direction: "rtl" }}>
-      {/* Header */}
       <div
         style={{
           marginBottom: 24,
@@ -1528,7 +1969,6 @@ export default function OrdersPage() {
         </Button>
       </div>
 
-      {/* Stats */}
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
         {statCards.map((s) => (
           <Col xs={12} sm={8} md={6} xl={4} key={s.key}>
@@ -1565,7 +2005,6 @@ export default function OrdersPage() {
         ))}
       </Row>
 
-      {/* Filters */}
       <Card
         style={{
           borderRadius: 16,
@@ -1656,7 +2095,6 @@ export default function OrdersPage() {
         </Row>
       </Card>
 
-      {/* Table */}
       <Card
         style={{ borderRadius: 16, border: "1px solid #E2E8F0" }}
         bodyStyle={{ padding: 0 }}
@@ -1716,7 +2154,6 @@ export default function OrdersPage() {
         onStatusUpdate={fetchOrders}
       />
 
-      {/* Edit Modal من الجدول مباشرة */}
       {selectedOrder && (
         <EditOrderModal
           open={editModalOpen}
