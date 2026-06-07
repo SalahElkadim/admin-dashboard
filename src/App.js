@@ -19,6 +19,7 @@ import SettingsPage from "./pages/settings/Settingspage";
 import CategoriesPage from "./pages/categories/CategoriesPage";
 import InventoryPage from "./pages/inventory/InventoryPage";
 import AttributesPage from "./pages/attributes/AttributesPage";
+import ShippingRatesPage from "./pages/shipping/ShippingRatesPage";
 
 // ── ERP Pages ─────────────────
 import SalesOrdersPage from "./pages/erp/sales/SalesOrdersPage";
@@ -73,6 +74,7 @@ export default function App() {
           <Route path="categories" element={<CategoriesPage />} />
           <Route path="inventory" element={<InventoryPage />} />
           <Route path="attributes" element={<AttributesPage />} />
+          <Route path="shipping-rates" element={<ShippingRatesPage />} />
         </Route>
 
         {/* ══ ERP ════════════════════════════════════════════ */}

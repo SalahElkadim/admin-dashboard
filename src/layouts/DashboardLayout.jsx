@@ -33,6 +33,7 @@ import {
   InboxOutlined,
   BuildOutlined,
   ApartmentOutlined,
+  CarOutlined,
 } from "@ant-design/icons";
 import useAuthStore from "../store/authStore";
 import useNotificationStore from "../store/notificationStore";
@@ -58,6 +59,7 @@ const NAV_ITEMS = [
   { key: "/notifications", icon: <BellOutlined />, label: "الإشعارات" },
   { key: "/settings", icon: <SettingOutlined />, label: "الإعدادات" },
   { key: "/system", icon: <ApartmentOutlined />, label: "النظام" },
+  { key: "/shipping-rates", icon: <CarOutlined />, label: "أسعار الشحن" },
 ];
 
 // ── Global Search Modal ───────────────────────────────────────────────────────
