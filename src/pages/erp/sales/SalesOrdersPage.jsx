@@ -35,6 +35,7 @@ import {
   CloseCircleOutlined,
   PrinterOutlined,
   DeleteFilled,
+  EnvironmentOutlined,
 } from "@ant-design/icons";
 import {
   getSalesOrders,
@@ -49,6 +50,37 @@ import axiosInstance from "../../../api/axiosInstance";
 const { Title, Text } = Typography;
 const { Option } = Select;
 const { TextArea } = Input;
+
+// ── قائمة المحافظات المصرية ──────────────────────────────────
+const EGYPTIAN_GOVERNORATES = [
+  "القاهرة",
+  "الجيزة",
+  "الإسكندرية",
+  "الدقهلية",
+  "البحر الأحمر",
+  "البحيرة",
+  "الفيوم",
+  "الغربية",
+  "الإسماعيلية",
+  "المنوفية",
+  "المنيا",
+  "القليوبية",
+  "الوادي الجديد",
+  "السويس",
+  "أسوان",
+  "أسيوط",
+  "بني سويف",
+  "بورسعيد",
+  "دمياط",
+  "الشرقية",
+  "جنوب سيناء",
+  "كفر الشيخ",
+  "مطروح",
+  "الأقصر",
+  "قنا",
+  "شمال سيناء",
+  "سوهاج",
+];
 
 const STATUS_CONFIG = {
   draft: {
@@ -94,6 +126,7 @@ const STATUS_CONFIG = {
     icon: <CloseCircleOutlined />,
   },
 };
+
 const SOURCE_CONFIG = {
   online: { color: "#6366F1", label: "أونلاين" },
   manual: { color: "#64748B", label: "يدوي" },
@@ -103,6 +136,7 @@ const SOURCE_CONFIG = {
   phone: { color: "#F59E0B", label: "تليفون" },
   pos: { color: "#8B5CF6", label: "POS" },
 };
+
 const PAYMENT_STATUS_CONFIG = {
   pending: { color: "#F59E0B", label: "معلق" },
   paid: { color: "#10B981", label: "مدفوع" },
@@ -135,6 +169,7 @@ const StatusTag = ({ status }) => {
     </span>
   );
 };
+
 const SourceTag = ({ source }) => {
   const c = SOURCE_CONFIG[source] || { color: "#94A3B8", label: source };
   return (
@@ -229,6 +264,7 @@ const StatsCards = ({ stats }) => (
   </Row>
 );
 
+// ── Product Item Picker ───────────────────────────────────────
 function ProductItemPicker({ onAdd }) {
   const [query, setQuery] = useState("");
   const [products, setProducts] = useState([]);
@@ -659,6 +695,7 @@ function ProductItemPicker({ onAdd }) {
   );
 }
 
+// ── Items List ────────────────────────────────────────────────
 function ItemsList({ items, onRemove, onQtyChange, onDiscountChange }) {
   if (items.length === 0)
     return (
@@ -817,6 +854,7 @@ function ItemsList({ items, onRemove, onQtyChange, onDiscountChange }) {
   );
 }
 
+// ── Order Detail Drawer ───────────────────────────────────────
 function OrderDetailDrawer({ order, open, onClose, onStatusChange }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -901,6 +939,7 @@ function OrderDetailDrawer({ order, open, onClose, onStatusChange }) {
         </Space>
       }
     >
+      {/* بيانات العميل */}
       <div
         style={{
           background: "#F8FAFC",
@@ -929,6 +968,68 @@ function OrderDetailDrawer({ order, open, onClose, onStatusChange }) {
         </InfoRow>
       </div>
 
+      {/* ── بيانات الشحن/العنوان ── */}
+      {(order.governorate || order.address_details) && (
+        <div
+          style={{
+            background: "#F0FDF4",
+            borderRadius: 12,
+            padding: "16px 20px",
+            marginBottom: 20,
+            border: "1px solid #BBF7D0",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              marginBottom: 12,
+            }}
+          >
+            <EnvironmentOutlined style={{ color: "#10B981", fontSize: 14 }} />
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#059669",
+                letterSpacing: 1,
+              }}
+            >
+              بيانات العنوان
+            </Text>
+          </div>
+          {order.governorate && (
+            <InfoRow label="المحافظة" value={order.governorate} />
+          )}
+          {order.address_details && (
+            <div style={{ paddingTop: 10 }}>
+              <Text
+                style={{
+                  color: "#94A3B8",
+                  fontSize: 13,
+                  display: "block",
+                  marginBottom: 4,
+                }}
+              >
+                العنوان بالتفصيل
+              </Text>
+              <Text
+                style={{
+                  fontWeight: 600,
+                  fontSize: 13,
+                  color: "#0F172A",
+                  lineHeight: 1.7,
+                }}
+              >
+                {order.address_details}
+              </Text>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* المنتجات */}
       <Text
         style={{
           fontSize: 11,
@@ -1002,6 +1103,7 @@ function OrderDetailDrawer({ order, open, onClose, onStatusChange }) {
         ))
       )}
 
+      {/* التسعير */}
       <div
         style={{
           background: "#F8FAFC",
@@ -1037,6 +1139,7 @@ function OrderDetailDrawer({ order, open, onClose, onStatusChange }) {
         </div>
       </div>
 
+      {/* الدفع */}
       <div
         style={{
           background: "#F8FAFC",
@@ -1112,15 +1215,12 @@ function OrderFormModal({ open, onClose, onSuccess, editOrder }) {
   const tax = Form.useWatch("tax_amount", form) || 0;
   const shipping = Form.useWatch("shipping_cost", form) || 0;
 
-  // ✅ الـ subtotal = مجموع (سعر - خصم item) × كمية لكل item
   const itemsSubtotal = items.reduce(
     (s, it) =>
       s +
       (Number(it.unit_price) - Number(it.discount || 0)) * Number(it.quantity),
     0
   );
-
-  // ✅ الإجمالي الكلي الصحيح = subtotal - خصم إضافي + ضريبة + شحن
   const grandTotal =
     itemsSubtotal - Number(discount) + Number(tax) + Number(shipping);
 
@@ -1134,6 +1234,9 @@ function OrderFormModal({ open, onClose, onSuccess, editOrder }) {
         customer_phone: editOrder.customer_phone,
         customer_email: editOrder.customer_email,
         customer_note: editOrder.customer_note,
+        // ── الحقلان الجديدان ──
+        governorate: editOrder.governorate || undefined,
+        address_details: editOrder.address_details || "",
         payment_method: editOrder.payment_method,
         payment_status: editOrder.payment_status,
         amount_paid: editOrder.amount_paid,
@@ -1179,8 +1282,6 @@ function OrderFormModal({ open, onClose, onSuccess, editOrder }) {
       }
       setLoading(true);
 
-      // ✅ احسب الـ subtotal من الـ items وابعته مع الـ payload
-      // عشان الـ backend يقدر يحسب الـ total صح فوراً
       const computedSubtotal = items.reduce(
         (s, it) =>
           s +
@@ -1196,8 +1297,6 @@ function OrderFormModal({ open, onClose, onSuccess, editOrder }) {
 
       const payload = {
         ...values,
-        // ✅ ابعت الـ subtotal والـ total المحسوبين من الـ frontend
-        // عشان الـ backend ميستناش الـ items يتضافوا
         subtotal: computedSubtotal,
         total: computedTotal,
       };
@@ -1209,13 +1308,11 @@ function OrderFormModal({ open, onClose, onSuccess, editOrder }) {
       } else {
         const res = await createSalesOrder(payload);
         orderId = res.data?.id ?? res.data?.data?.id;
-
         if (!orderId) {
           message.error("فشل في الحصول على رقم الأمر");
           return;
         }
 
-        // ✅ ضيف items بعد إنشاء الأمر
         for (const it of items) {
           await addSalesOrderItem(orderId, {
             variant: it.variant,
@@ -1228,8 +1325,6 @@ function OrderFormModal({ open, onClose, onSuccess, editOrder }) {
           });
         }
 
-        // ✅ بعد إضافة الـ items، ابعت patch تاني لتحديث الـ total
-        // عشان لو الـ backend بيحسبه من الـ items في الـ DB
         await updateSalesOrder(orderId, {
           subtotal: computedSubtotal,
           total: computedTotal,
@@ -1272,7 +1367,6 @@ function OrderFormModal({ open, onClose, onSuccess, editOrder }) {
             alignItems: "center",
           }}
         >
-          {/* ✅ الـ footer بيعرض التفاصيل الكاملة للإجمالي */}
           <div
             style={{
               background: items.length ? "#F0FDF4" : "#F8FAFC",
@@ -1350,6 +1444,7 @@ function OrderFormModal({ open, onClose, onSuccess, editOrder }) {
       }
     >
       <Form form={form} layout="vertical" style={{ marginTop: 8 }}>
+        {/* المصدر والحالة */}
         <Row gutter={16}>
           <Col span={12}>
             <Form.Item
@@ -1379,6 +1474,7 @@ function OrderFormModal({ open, onClose, onSuccess, editOrder }) {
           </Col>
         </Row>
 
+        {/* بيانات العميل */}
         <Divider
           orientation="right"
           orientationMargin={0}
@@ -1415,6 +1511,48 @@ function OrderFormModal({ open, onClose, onSuccess, editOrder }) {
           </Col>
         </Row>
 
+        {/* ── بيانات العنوان — الحقلان الجديدان ── */}
+        <Divider
+          orientation="right"
+          orientationMargin={0}
+          style={{ fontSize: 12, color: "#94A3B8" }}
+        >
+          <Space>
+            <EnvironmentOutlined style={{ color: "#10B981" }} />
+            بيانات العنوان
+          </Space>
+        </Divider>
+        <Row gutter={16}>
+          <Col span={10}>
+            <Form.Item name="governorate" label="المحافظة">
+              <Select
+                placeholder="اختر المحافظة"
+                allowClear
+                showSearch
+                filterOption={(input, option) =>
+                  option?.children?.includes(input)
+                }
+              >
+                {EGYPTIAN_GOVERNORATES.map((g) => (
+                  <Option key={g} value={g}>
+                    {g}
+                  </Option>
+                ))}
+              </Select>
+            </Form.Item>
+          </Col>
+          <Col span={14}>
+            <Form.Item name="address_details" label="العنوان بالتفصيل">
+              <TextArea
+                rows={2}
+                placeholder="الشارع، رقم المبنى، الدور، الشقة، أقرب علامة مميزة..."
+                style={{ resize: "none" }}
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        {/* المنتجات */}
         <Divider
           orientation="right"
           orientationMargin={0}
@@ -1449,6 +1587,7 @@ function OrderFormModal({ open, onClose, onSuccess, editOrder }) {
           }
         />
 
+        {/* التسعير والدفع */}
         <Divider
           orientation="right"
           orientationMargin={0}
@@ -1636,6 +1775,20 @@ export default function SalesOrdersPage() {
               {row.customer_phone}
             </Text>
           )}
+          {/* ── عرض المحافظة في جدول العملاء ── */}
+          {row.governorate && (
+            <Text
+              style={{
+                color: "#10B981",
+                fontSize: 11,
+                display: "flex",
+                alignItems: "center",
+                gap: 3,
+              }}
+            >
+              <EnvironmentOutlined style={{ fontSize: 10 }} /> {row.governorate}
+            </Text>
+          )}
         </div>
       ),
     },
@@ -1774,6 +1927,7 @@ export default function SalesOrdersPage() {
         <StatsCards stats={stats} />
       </Spin>
 
+      {/* الفلاتر */}
       <div
         style={{
           background: "#fff",
@@ -1873,6 +2027,7 @@ export default function SalesOrdersPage() {
         )}
       </div>
 
+      {/* الجدول */}
       <div
         style={{
           background: "#fff",

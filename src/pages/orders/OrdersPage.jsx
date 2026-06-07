@@ -21,6 +21,7 @@ import {
   Modal,
   Form,
   Divider,
+  InputNumber,
 } from "antd";
 import {
   SearchOutlined,
@@ -40,6 +41,8 @@ import {
   RollbackOutlined,
   GiftOutlined,
   DeleteOutlined,
+  PlusOutlined,
+  MinusCircleOutlined,
 } from "@ant-design/icons";
 import {
   getOrders,
@@ -49,11 +52,13 @@ import {
   exportOrders,
   deleteOrder,
 } from "../../api/ordersapi";
+import axios from "axios";
 
 const { Text, Title } = Typography;
 const { Option } = Select;
+const { TextArea } = Input;
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────────────
 
 const STATUS_META = {
   pending: {
@@ -94,6 +99,9 @@ const ALLOWED_TRANSITIONS = {
   refunded: [],
 };
 
+// حالات لا يمكن تعديل الأوردر فيها
+const NON_EDITABLE_STATUSES = ["delivered", "refunded"];
+
 const fmtMoney = (v) =>
   Number(v || 0).toLocaleString("en-US", {
     style: "currency",
@@ -101,7 +109,6 @@ const fmtMoney = (v) =>
     maximumFractionDigits: 2,
   });
 
-// ── Helper: استخرج الـ data من أي شكل response ──────────────────────────────
 const extractData = (data) => data?.data ?? data;
 const extractList = (data) =>
   data?.results ?? data?.data?.results ?? data?.data ?? [];
@@ -115,8 +122,7 @@ const WhatsAppIcon = ({ size = 13, color = "#25D366" }) => (
   </svg>
 );
 
-// ── Order Steps ───────────────────────────────────────────────────────────────
-
+// ── Order Status Steps ─────────────────────────────────────────────────────────
 const ORDER_STEPS = ["pending", "confirmed", "shipped", "delivered"];
 
 function OrderStatusSteps({ status }) {
@@ -159,8 +165,7 @@ function OrderStatusSteps({ status }) {
   );
 }
 
-// ── Update Status Modal ───────────────────────────────────────────────────────
-
+// ── Update Status Modal ────────────────────────────────────────────────────────
 function UpdateStatusModal({ open, order, onClose, onUpdated }) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -251,20 +256,439 @@ function UpdateStatusModal({ open, order, onClose, onUpdated }) {
   );
 }
 
-// ── Order Detail Drawer ───────────────────────────────────────────────────────
+// ── Edit Order Modal ───────────────────────────────────────────────────────────
+function EditOrderModal({ open, order, onClose, onUpdated }) {
+  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
 
+  // ملء الفورم لما يفتح
+  useEffect(() => {
+    if (open && order) {
+      form.setFieldsValue({
+        shipping_name: order.shipping_name || "",
+        shipping_phone: order.shipping_phone || "",
+        whatsapp_number: order.whatsapp_number || "",
+        shipping_address: order.shipping_address || "",
+        shipping_city: order.shipping_city || "",
+        shipping_country: order.shipping_country || "",
+        shipping_postal_code: order.shipping_postal_code || "",
+        payment_method: order.payment_method || undefined,
+        payment_status: order.payment_status || undefined,
+        shipping_cost: Number(order.shipping_cost) || 0,
+        notes: order.notes || "",
+        items:
+          order.items?.map((item) => ({
+            product: item.product,
+            variant: item.variant,
+            quantity: item.quantity,
+            // للعرض فقط
+            _product_name: item.product_name,
+            _variant_name: item.variant_name,
+            _unit_price: item.unit_price,
+          })) || [],
+      });
+    }
+  }, [open, order, form]);
+
+  const handleOk = async () => {
+    let values;
+    try {
+      values = await form.validateFields();
+    } catch {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // نرسل فقط الحقول القابلة للتعديل (بدون _product_name وغيرها)
+      const payload = {
+        shipping_name: values.shipping_name,
+        shipping_phone: values.shipping_phone,
+        whatsapp_number: values.whatsapp_number,
+        shipping_address: values.shipping_address,
+        shipping_city: values.shipping_city,
+        shipping_country: values.shipping_country,
+        shipping_postal_code: values.shipping_postal_code,
+        payment_method: values.payment_method,
+        payment_status: values.payment_status,
+        shipping_cost: values.shipping_cost,
+        notes: values.notes,
+        items: values.items.map(({ product, variant, quantity }) => ({
+          product,
+          variant: variant || null,
+          quantity,
+        })),
+      };
+
+      await axios.patch(`/api/admin/orders/${order.id}/edit/`, payload);
+      message.success("تم تحديث الأوردر بنجاح ✅");
+      onUpdated();
+      onClose();
+    } catch (err) {
+      const errMsg =
+        err.response?.data?.message ||
+        err.response?.data?.errors ||
+        "فشل التحديث";
+      message.error(
+        typeof errMsg === "string" ? errMsg : JSON.stringify(errMsg)
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const isNonEditable = NON_EDITABLE_STATUSES.includes(order?.status);
+
+  return (
+    <Modal
+      open={open}
+      onCancel={onClose}
+      onOk={handleOk}
+      okText="حفظ التعديلات"
+      cancelText="إلغاء"
+      confirmLoading={loading}
+      okButtonProps={{ disabled: isNonEditable }}
+      title={
+        <Space>
+          <EditOutlined style={{ color: "#6366F1" }} />
+          <Text style={{ fontWeight: 700 }}>
+            تعديل الطلب #{order?.order_number}
+          </Text>
+          {isNonEditable && (
+            <Tag color="red" style={{ borderRadius: 6, marginRight: 8 }}>
+              لا يمكن التعديل
+            </Tag>
+          )}
+        </Space>
+      }
+      width={720}
+      style={{ direction: "rtl" }}
+      styles={{ body: { maxHeight: "75vh", overflowY: "auto" } }}
+    >
+      {isNonEditable ? (
+        <div
+          style={{
+            padding: 20,
+            textAlign: "center",
+            background: "#FEF2F2",
+            borderRadius: 10,
+            border: "1px solid #FECACA",
+          }}
+        >
+          <Text style={{ color: "#DC2626", fontSize: 14 }}>
+            لا يمكن تعديل الأوردرات بحالة "{STATUS_META[order?.status]?.label}"
+          </Text>
+        </div>
+      ) : (
+        <Form form={form} layout="vertical" requiredMark={false}>
+          {/* ── بيانات الشحن ── */}
+          <div
+            style={{
+              background: "#F8FAFC",
+              borderRadius: 10,
+              padding: "16px 16px 4px",
+              border: "1px solid #E2E8F0",
+              marginBottom: 16,
+            }}
+          >
+            <Text
+              style={{
+                fontWeight: 600,
+                color: "#0F172A",
+                display: "block",
+                marginBottom: 12,
+              }}
+            >
+              📦 بيانات الشحن
+            </Text>
+            <Row gutter={12}>
+              <Col span={12}>
+                <Form.Item
+                  name="shipping_name"
+                  label="الاسم"
+                  rules={[{ required: true, message: "مطلوب" }]}
+                >
+                  <Input placeholder="اسم المستلم" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="shipping_phone"
+                  label="الهاتف"
+                  rules={[{ required: true, message: "مطلوب" }]}
+                >
+                  <Input placeholder="رقم الهاتف" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item name="whatsapp_number" label="واتساب">
+                  <Input placeholder="رقم الواتساب (اختياري)" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="shipping_city"
+                  label="المدينة"
+                  rules={[{ required: true, message: "مطلوب" }]}
+                >
+                  <Input placeholder="المدينة / المحافظة" />
+                </Form.Item>
+              </Col>
+              <Col span={24}>
+                <Form.Item
+                  name="shipping_address"
+                  label="العنوان"
+                  rules={[{ required: true, message: "مطلوب" }]}
+                >
+                  <Input placeholder="العنوان التفصيلي" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item name="shipping_country" label="الدولة">
+                  <Input placeholder="الدولة" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item name="shipping_postal_code" label="الرمز البريدي">
+                  <Input placeholder="الرمز البريدي" />
+                </Form.Item>
+              </Col>
+            </Row>
+          </div>
+
+          {/* ── الدفع والتكاليف ── */}
+          <div
+            style={{
+              background: "#F8FAFC",
+              borderRadius: 10,
+              padding: "16px 16px 4px",
+              border: "1px solid #E2E8F0",
+              marginBottom: 16,
+            }}
+          >
+            <Text
+              style={{
+                fontWeight: 600,
+                color: "#0F172A",
+                display: "block",
+                marginBottom: 12,
+              }}
+            >
+              💳 الدفع والتكاليف
+            </Text>
+            <Row gutter={12}>
+              <Col span={8}>
+                <Form.Item name="payment_method" label="طريقة الدفع">
+                  <Select placeholder="اختر..." allowClear>
+                    {Object.entries(PAYMENT_METHOD_LABELS).map(([k, v]) => (
+                      <Option key={k} value={k}>
+                        {v}
+                      </Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="payment_status" label="حالة الدفع">
+                  <Select placeholder="اختر..." allowClear>
+                    {Object.entries(PAYMENT_STATUS_META).map(([k, v]) => (
+                      <Option key={k} value={k}>
+                        {v.label}
+                      </Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="shipping_cost" label="تكلفة الشحن ($)">
+                  <InputNumber
+                    min={0}
+                    step={0.5}
+                    style={{ width: "100%" }}
+                    placeholder="0.00"
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+          </div>
+
+          {/* ── المنتجات ── */}
+          <div
+            style={{
+              background: "#F8FAFC",
+              borderRadius: 10,
+              padding: "16px 16px 4px",
+              border: "1px solid #E2E8F0",
+              marginBottom: 16,
+            }}
+          >
+            <Text
+              style={{
+                fontWeight: 600,
+                color: "#0F172A",
+                display: "block",
+                marginBottom: 12,
+              }}
+            >
+              🛍️ المنتجات
+            </Text>
+            <Form.List
+              name="items"
+              rules={[
+                {
+                  validator: async (_, items) => {
+                    if (!items || items.length === 0)
+                      return Promise.reject(
+                        new Error("لازم يكون في منتج واحد على الأقل")
+                      );
+                  },
+                },
+              ]}
+            >
+              {(fields, { add, remove }, { errors }) => (
+                <>
+                  {fields.map(({ key, name, ...restField }) => {
+                    const item = form.getFieldValue(["items", name]) || {};
+                    return (
+                      <div
+                        key={key}
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: 8,
+                          background: "#fff",
+                          borderRadius: 8,
+                          padding: "10px 12px",
+                          border: "1px solid #E2E8F0",
+                          marginBottom: 8,
+                        }}
+                      >
+                        {/* معلومات المنتج (للقراءة فقط) */}
+                        <div style={{ flex: 1 }}>
+                          <Text
+                            style={{
+                              fontWeight: 600,
+                              fontSize: 13,
+                              display: "block",
+                            }}
+                          >
+                            {item._product_name || `منتج #${item.product}`}
+                          </Text>
+                          {item._variant_name && (
+                            <Text style={{ color: "#94A3B8", fontSize: 11 }}>
+                              {item._variant_name}
+                            </Text>
+                          )}
+                          {item._unit_price && (
+                            <Text
+                              style={{
+                                color: "#6366F1",
+                                fontSize: 11,
+                                display: "block",
+                              }}
+                            >
+                              {fmtMoney(item._unit_price)} / الوحدة
+                            </Text>
+                          )}
+                        </div>
+                        {/* الكمية فقط قابلة للتعديل */}
+                        <Form.Item
+                          {...restField}
+                          name={[name, "quantity"]}
+                          rules={[
+                            { required: true, message: "الكمية" },
+                            { type: "number", min: 1, message: "≥ 1" },
+                          ]}
+                          style={{ marginBottom: 0, width: 100 }}
+                          label="الكمية"
+                        >
+                          <InputNumber min={1} style={{ width: "100%" }} />
+                        </Form.Item>
+                        {/* حقول مخفية */}
+                        <Form.Item
+                          {...restField}
+                          name={[name, "product"]}
+                          noStyle
+                        >
+                          <Input type="hidden" />
+                        </Form.Item>
+                        <Form.Item
+                          {...restField}
+                          name={[name, "variant"]}
+                          noStyle
+                        >
+                          <Input type="hidden" />
+                        </Form.Item>
+                        <Form.Item
+                          {...restField}
+                          name={[name, "_product_name"]}
+                          noStyle
+                        >
+                          <Input type="hidden" />
+                        </Form.Item>
+                        <Form.Item
+                          {...restField}
+                          name={[name, "_variant_name"]}
+                          noStyle
+                        >
+                          <Input type="hidden" />
+                        </Form.Item>
+                        <Form.Item
+                          {...restField}
+                          name={[name, "_unit_price"]}
+                          noStyle
+                        >
+                          <Input type="hidden" />
+                        </Form.Item>
+
+                        <Tooltip title="حذف المنتج">
+                          <Button
+                            type="text"
+                            danger
+                            icon={<MinusCircleOutlined />}
+                            onClick={() => {
+                              if (fields.length === 1) {
+                                message.warning(
+                                  "لازم يكون في منتج واحد على الأقل"
+                                );
+                                return;
+                              }
+                              remove(name);
+                            }}
+                            style={{ marginTop: 28 }}
+                          />
+                        </Tooltip>
+                      </div>
+                    );
+                  })}
+                  <Form.ErrorList errors={errors} />
+                </>
+              )}
+            </Form.List>
+          </div>
+
+          {/* ── ملاحظات ── */}
+          <Form.Item name="notes" label="ملاحظات">
+            <TextArea rows={3} placeholder="أي ملاحظات إضافية على الأوردر..." />
+          </Form.Item>
+        </Form>
+      )}
+    </Modal>
+  );
+}
+
+// ── Order Detail Drawer ────────────────────────────────────────────────────────
 function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   const loadOrder = useCallback(() => {
     if (!orderId) return;
     setLoading(true);
     getOrder(orderId)
-      .then(({ data }) => {
-        setOrder(extractData(data));
-      })
+      .then(({ data }) => setOrder(extractData(data)))
       .catch(() => message.error("فشل تحميل تفاصيل الطلب"))
       .finally(() => setLoading(false));
   }, [orderId]);
@@ -277,6 +701,8 @@ function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
     loadOrder();
     onStatusUpdate();
   };
+
+  const canEdit = order && !NON_EDITABLE_STATUSES.includes(order.status);
 
   return (
     <>
@@ -298,18 +724,33 @@ function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
         style={{ direction: "rtl" }}
         extra={
           order && (
-            <Button
-              type="primary"
-              icon={<EditOutlined />}
-              onClick={() => setStatusModalOpen(true)}
-              style={{
-                background: "linear-gradient(135deg, #6366F1, #8B5CF6)",
-                border: "none",
-                borderRadius: 8,
-              }}
-            >
-              تحديث الحالة
-            </Button>
+            <Space>
+              {canEdit && (
+                <Button
+                  icon={<EditOutlined />}
+                  onClick={() => setEditModalOpen(true)}
+                  style={{
+                    borderRadius: 8,
+                    borderColor: "#10B981",
+                    color: "#10B981",
+                  }}
+                >
+                  تعديل الأوردر
+                </Button>
+              )}
+              <Button
+                type="primary"
+                icon={<EditOutlined />}
+                onClick={() => setStatusModalOpen(true)}
+                style={{
+                  background: "linear-gradient(135deg,#6366F1,#8B5CF6)",
+                  border: "none",
+                  borderRadius: 8,
+                }}
+              >
+                تحديث الحالة
+              </Button>
+            </Space>
           )
         }
       >
@@ -536,7 +977,6 @@ function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
                   </Descriptions>
                 </Card>
               </Col>
-
               <Col span={12}>
                 <Card
                   title={
@@ -557,12 +997,9 @@ function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
                     <Descriptions.Item label="الاسم">
                       {order.shipping_name}
                     </Descriptions.Item>
-
                     <Descriptions.Item label="الهاتف">
                       {order.shipping_phone}
                     </Descriptions.Item>
-
-                    {/* ── رقم الواتساب ── */}
                     {order.whatsapp_number && (
                       <Descriptions.Item
                         label={
@@ -589,7 +1026,6 @@ function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
                         </a>
                       </Descriptions.Item>
                     )}
-
                     <Descriptions.Item label="العنوان">
                       {order.shipping_address}, {order.shipping_city},{" "}
                       {order.shipping_country}
@@ -717,19 +1153,28 @@ function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
           onUpdated={handleUpdated}
         />
       )}
+      {order && (
+        <EditOrderModal
+          open={editModalOpen}
+          order={order}
+          onClose={() => setEditModalOpen(false)}
+          onUpdated={handleUpdated}
+        />
+      )}
     </>
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
-
+// ── Main Page ──────────────────────────────────────────────────────────────────
 export default function OrdersPage() {
   const [orders, setOrders] = useState([]);
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
+  const [selectedOrder, setSelectedOrder] = useState(null);
 
   const [filters, setFilters] = useState({
     search: "",
@@ -774,7 +1219,6 @@ export default function OrdersPage() {
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
-
   useEffect(() => {
     getOrderStats()
       .then(({ data }) => setStats(data?.data ?? data ?? {}))
@@ -808,6 +1252,17 @@ export default function OrdersPage() {
       fetchOrders();
     } catch (err) {
       message.error(err.response?.data?.message || "فشل حذف الطلب");
+    }
+  };
+
+  // فتح Edit Modal من الجدول مباشرة (بدون drawer)
+  const openEditFromTable = async (record) => {
+    try {
+      const { data } = await getOrder(record.id);
+      setSelectedOrder(extractData(data));
+      setEditModalOpen(true);
+    } catch {
+      message.error("فشل تحميل بيانات الطلب");
     }
   };
 
@@ -989,37 +1444,51 @@ export default function OrdersPage() {
       title: "",
       key: "actions",
       fixed: "left",
-      width: 60,
-      render: (_, r) => (
-        <Space>
-          <Tooltip title="عرض التفاصيل">
-            <Button
-              type="text"
-              size="small"
-              icon={<EyeOutlined />}
-              onClick={() => openDrawer(r.id)}
-              style={{ color: "#6366F1" }}
-            />
-          </Tooltip>
-          <Popconfirm
-            title="حذف الطلب"
-            description={`هل أنت متأكد من حذف الطلب #${r.order_number}؟`}
-            onConfirm={() => handleDeleteOrder(r.id)}
-            okText="حذف"
-            cancelText="إلغاء"
-            okButtonProps={{ danger: true }}
-          >
-            <Tooltip title="حذف الطلب">
+      width: 90,
+      render: (_, r) => {
+        const canEdit = !NON_EDITABLE_STATUSES.includes(r.status);
+        return (
+          <Space>
+            <Tooltip title="عرض التفاصيل">
               <Button
                 type="text"
                 size="small"
-                icon={<DeleteOutlined />}
-                style={{ color: "#EF4444" }}
+                icon={<EyeOutlined />}
+                onClick={() => openDrawer(r.id)}
+                style={{ color: "#6366F1" }}
               />
             </Tooltip>
-          </Popconfirm>
-        </Space>
-      ),
+            {canEdit && (
+              <Tooltip title="تعديل الأوردر">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={() => openEditFromTable(r)}
+                  style={{ color: "#10B981" }}
+                />
+              </Tooltip>
+            )}
+            <Popconfirm
+              title="حذف الطلب"
+              description={`هل أنت متأكد من حذف الطلب #${r.order_number}؟`}
+              onConfirm={() => handleDeleteOrder(r.id)}
+              okText="حذف"
+              cancelText="إلغاء"
+              okButtonProps={{ danger: true }}
+            >
+              <Tooltip title="حذف الطلب">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<DeleteOutlined />}
+                  style={{ color: "#EF4444" }}
+                />
+              </Tooltip>
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -1206,13 +1675,12 @@ export default function OrdersPage() {
             {loading ? "جاري التحميل..." : `${total} طلب`}
           </Text>
         </div>
-
         <Table
           rowKey="id"
           dataSource={orders}
           columns={columns}
           loading={loading}
-          scroll={{ x: 1000 }}
+          scroll={{ x: 1100 }}
           onChange={handleTableChange}
           pagination={{
             current: filters.page,
@@ -1247,6 +1715,19 @@ export default function OrdersPage() {
         onClose={() => setDrawerOpen(false)}
         onStatusUpdate={fetchOrders}
       />
+
+      {/* Edit Modal من الجدول مباشرة */}
+      {selectedOrder && (
+        <EditOrderModal
+          open={editModalOpen}
+          order={selectedOrder}
+          onClose={() => {
+            setEditModalOpen(false);
+            setSelectedOrder(null);
+          }}
+          onUpdated={fetchOrders}
+        />
+      )}
     </div>
   );
 }
