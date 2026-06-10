@@ -867,7 +867,7 @@ function EditOrderModal({ open, order, onClose, onUpdated }) {
           quantity,
         })),
       };
-      await axiosInstance.patch(`/api/admin/orders/${order.id}/edit/`, payload);
+      await axiosInstance.patch(`orders/${order.id}/edit/`, payload);
       message.success("تم تحديث الأوردر بنجاح ✅");
       onUpdated();
       onClose();
