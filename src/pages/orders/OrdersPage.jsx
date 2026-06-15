@@ -815,6 +815,7 @@ function EditOrderModal({ open, order, onClose, onUpdated }) {
       whatsapp_number: order.whatsapp_number || "",
       shipping_address: order.shipping_address || "",
       shipping_city: order.shipping_city || "",
+      shipping_district: order.shipping_district || "",
       shipping_country: order.shipping_country || "",
       shipping_postal_code: order.shipping_postal_code || "",
       payment_method: order.payment_method || undefined,
@@ -855,6 +856,7 @@ function EditOrderModal({ open, order, onClose, onUpdated }) {
         whatsapp_number: values.whatsapp_number,
         shipping_address: values.shipping_address,
         shipping_city: values.shipping_city,
+        shipping_district: values.shipping_district,
         shipping_country: values.shipping_country,
         shipping_postal_code: values.shipping_postal_code,
         payment_method: values.payment_method,
@@ -978,6 +980,12 @@ function EditOrderModal({ open, order, onClose, onUpdated }) {
                   <Input placeholder="المدينة / المحافظة" />
                 </Form.Item>
               </Col>
+              <Col span={12}>
+                <Form.Item name="shipping_district" label="المركز / المنطقة">
+                  <Input placeholder="المركز أو المنطقة (اختياري)" />
+                </Form.Item>
+              </Col>
+
               <Col span={24}>
                 <Form.Item
                   name="shipping_address"
@@ -1478,8 +1486,16 @@ function OrderDrawer({ orderId, open, onClose, onStatusUpdate }) {
                         </a>
                       </Descriptions.Item>
                     )}
+                    {order.shipping_district && (
+                      <Descriptions.Item label="المركز">
+                        {order.shipping_district}
+                      </Descriptions.Item>
+                    )}
                     <Descriptions.Item label="العنوان">
-                      {order.shipping_address}, {order.shipping_city},{" "}
+                      {order.shipping_address}, {order.shipping_city},
+                      {order.shipping_district
+                        ? ` ${order.shipping_district},`
+                        : ""}{" "}
                       {order.shipping_country}
                     </Descriptions.Item>
                   </Descriptions>
