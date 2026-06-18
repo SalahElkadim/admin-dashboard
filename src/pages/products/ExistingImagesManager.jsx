@@ -156,10 +156,13 @@ export default function ExistingImagesManager({ productId, onImagesChange }) {
         }}
       >
         {images.map((img) => {
-          const imgUrl =
+          const rawUrl =
             typeof img.image === "string"
               ? img.image
               : img.image?.url ?? img.image?.secure_url ?? "";
+
+          // بيشيل الـ prefix الزيادة "image/upload/" لو موجودة قبل https
+          const imgUrl = rawUrl.replace(/^image\/upload\/(?=https?:\/\/)/, "");
 
           const isDeleting = deletingId === img.id;
           const isSettingPrimary = settingPrimaryId === img.id;
