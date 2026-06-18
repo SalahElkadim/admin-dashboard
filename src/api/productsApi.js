@@ -86,3 +86,9 @@ export const deleteAttribute = (id) =>
 
 export const deleteAttributeValue = (attributeId, valueId) =>
   axiosInstance.delete(`/attributes/${attributeId}/values/${valueId}/`);
+
+export const getPriceTiers = (productId) =>
+  axiosInstance.get(`/products/${productId}/price-tiers/`);
+
+export const savePriceTiers = (productId, tiers) =>
+  axiosInstance.post(`/products/${productId}/price-tiers/`, tiers);

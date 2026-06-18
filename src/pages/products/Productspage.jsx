@@ -48,8 +48,10 @@ import {
   getCategories,
   createProductVariant,
   getAttributes,
+  getPriceTiers,
+  savePriceTiers,
 } from "../../api/productsApi";
-
+import PriceTiersTab from "./PriceTiersTab";
 const { Text, Title } = Typography;
 const { Option } = Select;
 const { Dragger } = Upload;
@@ -506,7 +508,7 @@ function ProductModal({
   // ── بعد رفع الصور نحتاج نخزن url لكل ملف + الـ attribute_value المختار ──
   // uploadedImagesWithAttrs: [{uid, name, url, attribute_value}]
   const [uploadedImagesWithAttrs, setUploadedImagesWithAttrs] = useState([]);
-
+  const [tiersData, setTiersData] = useState([]);
   const isEdit = !!editRecord;
 
   useEffect(() => {
@@ -533,6 +535,12 @@ function ProductModal({
       setActiveTab("info");
       setVariantsData([]);
       setUploadedImagesWithAttrs([]);
+      setTiersData([]);
+      if (isEdit && editRecord?.id) {
+        getPriceTiers(editRecord.id)
+          .then(({ data }) => setTiersData(data?.data ?? []))
+          .catch(() => {});
+      }
     }
   }, [open, editRecord, isEdit, form]);
 
@@ -630,6 +638,13 @@ function ProductModal({
         const { data } = await createProduct(payload);
         productId = data?.data?.id ?? data?.id;
         message.success("تم إنشاء المنتج ✅");
+      }
+      if (tiersData.length > 0) {
+        try {
+          await savePriceTiers(productId, tiersData);
+        } catch {
+          message.warning("تم حفظ المنتج لكن فشل حفظ الأسعار — حاول مرة أخرى");
+        }
       }
 
       // ── 5. حفظ الـ Variants ──
@@ -734,6 +749,7 @@ function ProductModal({
       >
         <TabBtn id="info" icon={<InboxOutlined />} label="معلومات المنتج" />
         <TabBtn id="images" icon={<PictureOutlined />} label="الصور والفيديو" />
+        <TabBtn id="tiers" icon={<TagsOutlined />} label="الأسعار" />
         {!isEdit && (
           <TabBtn
             id="variants"
@@ -1054,7 +1070,13 @@ function ProductModal({
               )}
             </div>
           )}
-
+          <div style={{ display: activeTab === "tiers" ? "block" : "none" }}>
+            <PriceTiersTab
+              tiers={tiersData}
+              onChange={setTiersData}
+              productPrice={form.getFieldValue("price")}
+            />
+          </div>
           <div style={{ height: 8 }} />
         </Form>
       </div>
