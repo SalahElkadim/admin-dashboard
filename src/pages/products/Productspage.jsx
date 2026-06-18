@@ -52,6 +52,7 @@ import {
   savePriceTiers,
 } from "../../api/productsApi";
 import PriceTiersTab from "./PriceTiersTab";
+import ExistingImagesManager from "./ExistingImagesManager.jsx";
 const { Text, Title } = Typography;
 const { Option } = Select;
 const { Dragger } = Upload;
@@ -845,6 +846,7 @@ function ProductModal({
           {/* ══════════════ TAB 2: الصور والفيديو ══════════════ */}
           <div style={{ display: activeTab === "images" ? "block" : "none" }}>
             {/* ── الصور ── */}
+            {isEdit && <ExistingImagesManager productId={editRecord?.id} />}
             <Form.Item label="صور المنتج">
               <Dragger
                 listType="picture-card"
