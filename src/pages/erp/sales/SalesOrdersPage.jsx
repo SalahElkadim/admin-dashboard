@@ -44,6 +44,7 @@ import {
   deleteSalesOrder,
   getSalesOrderItems,
   addSalesOrderItem,
+  getSalesRevenueStats,
 } from "../../../api/erpApi";
 import axiosInstance from "../../../api/axiosInstance";
 
@@ -65,9 +66,9 @@ function RevenueStatsModal({ open, onClose }) {
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    axiosInstance.get('/erp/sales-orders/revenue-stats/')
-      .then(res => setData(res.data?.data ?? res.data))
-      .catch(() => message.error('فشل في تحميل الإيرادات'))
+    getSalesRevenueStats()
+      .then((res) => setData(res.data?.data ?? res.data))
+      .catch(() => message.error("فشل في تحميل الإيرادات"))
       .finally(() => setLoading(false));
   }, [open]);
 

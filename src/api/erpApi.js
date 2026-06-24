@@ -294,3 +294,5 @@ export const updateSalesTarget = (id, data) =>
   erpAxiosInstance.patch(`${ERP}/sales-targets/${id}/`, data);
 export const deleteSalesTarget = (id) =>
   erpAxiosInstance.delete(`${ERP}/sales-targets/${id}/`);
+export const getSalesRevenueStats = () =>
+  erpAxiosInstance.get(`${ERP}/sales-orders/revenue-stats/`);
