@@ -47,6 +47,127 @@ import {
 } from "../../../api/erpApi";
 import axiosInstance from "../../../api/axiosInstance";
 
+// ── بعد import axiosInstance مباشرة ──
+const PERIODS = [
+  { key: 'day',         label: 'آخر يوم',     color: '#6366F1' },
+  { key: 'week',        label: 'آخر أسبوع',   color: '#3B82F6' },
+  { key: 'month',       label: 'آخر 30 يوم',  color: '#10B981' },
+  { key: 'quarter',     label: 'آخر 3 شهور',  color: '#F59E0B' },
+  { key: 'half_year',   label: 'آخر 6 شهور',  color: '#EC4899' },
+  { key: 'nine_months', label: 'آخر 9 شهور',  color: '#8B5CF6' },
+  { key: 'year',        label: 'آخر سنة',     color: '#EF4444' },
+];
+
+function RevenueStatsModal({ open, onClose }) {
+  const [data, setData]       = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    axiosInstance.get('/erp/sales-orders/revenue-stats/')
+      .then(res => setData(res.data?.data ?? res.data))
+      .catch(() => message.error('فشل في تحميل الإيرادات'))
+      .finally(() => setLoading(false));
+  }, [open]);
+
+  const max = data
+    ? Math.max(...PERIODS.map(p => Number(data[p.key]?.revenue || 0)))
+    : 0;
+
+  return (
+    <Modal
+      open={open}
+      onCancel={onClose}
+      footer={null}
+      width={680}
+      style={{ direction: 'rtl' }}
+      title={
+        <Space>
+          <DollarOutlined style={{ color: '#10B981' }} />
+          <Text style={{ fontWeight: 700 }}>تقرير الإيرادات</Text>
+        </Space>
+      }
+    >
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 48 }}>
+          <Spin size="large" />
+        </div>
+      ) : data ? (
+        <div>
+          {PERIODS.map((p, idx) => {
+            const revenue = Number(data[p.key]?.revenue || 0);
+            const orders  = data[p.key]?.orders || 0;
+            const pct     = max > 0 ? (revenue / max) * 100 : 0;
+            const isTop   = idx === 0;
+
+            return (
+              <div
+                key={p.key}
+                style={{
+                  marginBottom: 14,
+                  padding: '14px 18px',
+                  borderRadius: 12,
+                  background: idx % 2 === 0 ? '#F8FAFC' : '#fff',
+                  border: '1px solid #E2E8F0',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <Text style={{ fontWeight: 700, color: '#0F172A', fontSize: 14 }}>
+                    {p.label}
+                  </Text>
+                  <Space size={16}>
+                    <Text style={{ fontSize: 12, color: '#94A3B8' }}>
+                      {orders} أمر
+                    </Text>
+                    <Text style={{ fontWeight: 800, fontSize: 16, color: p.color }}>
+                      {fmt(revenue)} ج.م
+                    </Text>
+                  </Space>
+                </div>
+                {/* Progress Bar */}
+                <div style={{
+                  height: 8,
+                  background: '#E2E8F0',
+                  borderRadius: 99,
+                  overflow: 'hidden',
+                }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${pct}%`,
+                    background: `linear-gradient(90deg, ${p.color}99, ${p.color})`,
+                    borderRadius: 99,
+                    transition: 'width .6s ease',
+                  }} />
+                </div>
+              </div>
+            );
+          })}
+
+          {/* ملخص سريع */}
+          <div style={{
+            marginTop: 20,
+            padding: '16px 20px',
+            background: 'linear-gradient(135deg, #10B981, #059669)',
+            borderRadius: 14,
+            color: '#fff',
+          }}>
+            <Text style={{ color: '#D1FAE5', fontSize: 12, display: 'block', marginBottom: 4 }}>
+              إجمالي إيرادات السنة
+            </Text>
+            <Text style={{ color: '#fff', fontSize: 28, fontWeight: 800 }}>
+              {fmt(data.year?.revenue || 0)} ج.م
+            </Text>
+            <Text style={{ color: '#A7F3D0', fontSize: 12, marginRight: 8 }}>
+              من {data.year?.orders || 0} أمر
+            </Text>
+          </div>
+        </div>
+      ) : null}
+    </Modal>
+  );
+}
+
 const { Title, Text } = Typography;
 const { Option } = Select;
 const { TextArea } = Input;
@@ -1673,6 +1794,7 @@ export default function SalesOrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editOrder, setEditOrder] = useState(null);
+  const [revenueModalOpen, setRevenueModalOpen] = useState(false);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -1921,6 +2043,18 @@ export default function SalesOrdersPage() {
         >
           أمر جديد
         </Button>
+        <Button
+          icon={<DollarOutlined />}
+          style={{
+            borderRadius: 8,
+            height: 38,
+            borderColor: "#10B981",
+            color: "#10B981",
+          }}
+          onClick={() => setRevenueModalOpen(true)}
+        >
+          الإيرادات
+        </Button>
       </div>
 
       <Spin spinning={statsLoading}>
@@ -2091,6 +2225,10 @@ export default function SalesOrdersPage() {
       />
 
       <style>{`.row-alt { background: #FAFBFF; }`}</style>
+      <RevenueStatsModal
+        open={revenueModalOpen}
+        onClose={() => setRevenueModalOpen(false)}
+      />
     </div>
   );
 }
